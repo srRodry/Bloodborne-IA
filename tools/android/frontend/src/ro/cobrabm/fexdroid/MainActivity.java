@@ -1051,7 +1051,8 @@ public final class MainActivity extends Activity {
             String line=it.next();
             if (fallback.isEmpty()) fallback=line;
             String lower=line.toLowerCase(java.util.Locale.ROOT);
-            if (lower.contains("stop:") || lower.contains("critical") || lower.contains("fatal") ||
+            if (lower.contains("game check failed:") || lower.contains("stop:") ||
+                    lower.contains("critical") || lower.contains("fatal") ||
                     lower.contains("error") || lower.contains("segmentation") ||
                     lower.contains("fault") || lower.contains("device lost")) {
                 fallback=line;
@@ -1106,10 +1107,16 @@ public final class MainActivity extends Activity {
                         String detail=lastGameLogDetail(gameLog);
                         String profile=gameProfileDetail(gameLog);
                         String memory=memoryAtExit();
-                        String message="Game stopped ("+code+(signal.isEmpty() ? "" : " · "+signal)+").";
-                        if (code==139) message+=" Native segmentation fault.";
+                        String message;
+                        if (detail.startsWith("GAME CHECK FAILED:")) {
+                            message="Game files validation failed.\n"+detail.substring("GAME CHECK FAILED:".length()).trim();
+                        } else {
+                            message="Game stopped ("+code+(signal.isEmpty() ? "" : " · "+signal)+").";
+                            if (code==139) message+=" Native segmentation fault.";
+                        }
                         if (!profile.isEmpty()) message+="\n"+profile;
-                        if (!detail.isEmpty()) message+="\nLast runtime line: "+detail;
+                        if (!detail.isEmpty() && !detail.startsWith("GAME CHECK FAILED:"))
+                            message+="\nLast runtime line: "+detail;
                         if (detail.contains("0x20b56d2"))
                             message+="\nKnown FileTransferTask fault: verify a clean, fully replaced 1.09 update "
                                 +"and temporarily disable loose mods.";

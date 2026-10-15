@@ -82,8 +82,10 @@ jobs:
           grep -q 'Game profile:' tools/android/frontend/src/ro/cobrabm/fexdroid/MainActivity.java
           grep -q 'const char \*original_game=getenv("BB_GAME_DIR")' src/probe.c
           grep -q 'using original' src/probe.c
-          grep -q 'android:versionCode="20"' tools/android/frontend/AndroidManifest.xml
-          grep -q 'android:versionName="0.8.4-sm8475-dev3"' tools/android/frontend/AndroidManifest.xml
+          grep -q 'GAME CHECK FAILED:' tools/android/prepare_game.py
+          grep -q 'detail.startsWith("GAME CHECK FAILED:")' tools/android/frontend/src/ro/cobrabm/fexdroid/MainActivity.java
+          grep -q 'android:versionCode="21"' tools/android/frontend/AndroidManifest.xml
+          grep -q 'android:versionName="0.8.4-sm8475-dev4"' tools/android/frontend/AndroidManifest.xml
 
 
   bootstrap-rootfs:

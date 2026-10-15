@@ -58,7 +58,12 @@ def main():
     work.mkdir()
     try:
         print('Game image: preparing selected game files (first launch may take a few minutes)', flush=True)
-        prepare.prepare(game, work)
+        try:
+            prepare.prepare(game, work)
+        except prepare.GameCheckError as error:
+            # Keep this single-line prefix stable: the Android frontend surfaces it directly.
+            print(f'GAME CHECK FAILED: {error}', file=sys.stderr, flush=True)
+            raise SystemExit(2)
         link_modules.link(game, work)
         content_profile.prepare(game, work)
         os.replace(work / 'boot-linked.bin', data / 'boot-linked.bin')
