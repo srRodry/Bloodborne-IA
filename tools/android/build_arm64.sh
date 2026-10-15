@@ -7,12 +7,10 @@ cd -- "$(dirname -- "$0")/../.."
 out=out/arm64
 sysroot=${BB_ARM64_SYSROOT:-$PWD/.local-deps/android/arm64-sysroot}
 prefix=$PWD/.local-deps/android/arm64-prefix
-# Header-only packages (magic_enum, robin-map, VMA, Boost) from the host build's dependencies.
-headers=${BB_ARM64_HEADERS:-$PWD/.local-deps/root/usr}
 toolchain=$PWD/tools/android/aarch64-toolchain.cmake
 [[ -f $sysroot/usr/lib/aarch64-linux-gnu/libc.so.6 ]] || { echo "No sysroot: $sysroot" >&2; exit 1; }
-[[ -f $prefix/lib/libminiz.a ]] || { echo "No ARM64 miniz in $prefix (see docs/ANDROID_THOR.md)" >&2; exit 1; }
-[[ -d $headers/share/cmake/magic_enum ]] || { echo "No header-only packages in $headers" >&2; exit 1; }
+[[ -f $prefix/lib/libminiz.a ]] || { echo "No ARM64 miniz in $prefix (run tools/android/bootstrap_build_deps.sh)" >&2; exit 1; }
+[[ -d $sysroot/usr/share/cmake/magic_enum ]] || { echo "No magic_enum in ARM64 sysroot; rerun fetch_arm64_sysroot.py" >&2; exit 1; }
 mkdir -p "$out"
 # This port's changes to FSR-Vulkan (gpu/patches/fsr-vulkan), applied once, as build.sh does.
 for patch in gpu/patches/fsr-vulkan/*.patch; do
@@ -32,13 +30,9 @@ ninja -C "$out/fex" bbcpu > "$out/fex-build.log" 2>&1 || { tail -40 "$out/fex-bu
 if [[ ! -f $out/gpu/build.ninja ]]; then
     lib=$sysroot/usr/lib/aarch64-linux-gnu/cmake
     cmake -S gpu -B "$out/gpu" -G Ninja -DCMAKE_TOOLCHAIN_FILE="$toolchain" \
-        -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBB_PGO=off "-DBB_ARM64_HEADER_PREFIX=$prefix;$headers" \
-        -Dminiz_DIR="$prefix/lib/cmake/miniz" -DZydis_DIR="$lib/zydis" -DZycore_DIR="$lib/zycore" \
-        -Dfmt_DIR="$lib/fmt" -Dmagic_enum_DIR="$headers/share/cmake/magic_enum" \
-        -Dtsl-robin-map_DIR="$headers/share/cmake/tsl-robin-map" \
-        -DVulkanMemoryAllocator_DIR="$headers/share/cmake/VulkanMemoryAllocator" \
-        -DBoost_DIR="$headers/lib/cmake/Boost-1.92.0" \
-        -Dboost_headers_DIR="$headers/lib/cmake/boost_headers-1.92.0" >/dev/null
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBB_PGO=off \
+        -DCMAKE_PREFIX_PATH="$prefix" -Dminiz_DIR="$prefix/lib/cmake/miniz" \
+        -DZydis_DIR="$lib/zydis" -DZycore_DIR="$lib/zycore" -Dfmt_DIR="$lib/fmt" >/dev/null
 fi
 ninja -C "$out/gpu" bbgpu > "$out/gpu-build.log" 2>&1 || { grep -v '^\[' "$out/gpu-build.log" | tail -40 >&2; exit 1; }
 
