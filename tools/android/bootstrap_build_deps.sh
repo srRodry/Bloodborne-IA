@@ -28,9 +28,11 @@ fi
 git -C "$vulkan_headers" fetch -q --depth 1 origin "$VULKAN_HEADERS_COMMIT"
 git -C "$vulkan_headers" checkout -q --force FETCH_HEAD
 git -C "$vulkan_headers" clean -qfdx
-rm -rf "$prefix/include/vulkan"
+# Vulkan core headers include sibling vk_video/ headers. Install the complete include tree,
+# not only include/vulkan, so the pinned header set remains internally consistent.
+rm -rf "$prefix/include/vulkan" "$prefix/include/vk_video"
 mkdir -p "$prefix/include"
-cp -a "$vulkan_headers/include/vulkan" "$prefix/include/"
+cp -a "$vulkan_headers/include/." "$prefix/include/"
 grep -q 'VK_VALVE_shader_mixed_float_dot_product' "$prefix/include/vulkan/vulkan_core.h" ||
     { echo 'Pinned Vulkan headers lack VK_VALVE_shader_mixed_float_dot_product' >&2; exit 1; }
 grep -q 'VK_EXT_shader_float8' "$prefix/include/vulkan/vulkan_core.h" ||
