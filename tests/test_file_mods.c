@@ -20,6 +20,8 @@ int main(void) {
     snprintf(link,sizeof(link),"%s/game/asset.dcx",root);
     assert(!mkdir(game,0755));
     FILE *f=fopen(source,"w"); assert(f); assert(fputs("modded",f)>=0); assert(!fclose(f));
+    assert(!symlink(source,link));
+    runtime_file_configure(game,user);
     /* Missing and empty app0 assets enter the crash-history ring; dumping it must be safe. */
     assert(do_open("/app0/missing.dcx",0,0)==-ENOENT);
     char empty[1024]; snprintf(empty,sizeof(empty),"%s/empty.dcx",game);
@@ -27,8 +29,6 @@ int main(void) {
     int empty_fd=(int)do_open("/app0/empty.dcx",0,0); assert(empty_fd>=3);
     char one=0; assert(do_read(empty_fd,&one,1)==0); assert(!do_close(empty_fd));
     runtime_file_dump_recent_problems();
-    assert(!symlink(source,link));
-    runtime_file_configure(game,user);
     for (int i=0;i<3;++i) {
         const char *path=i==0 ? "/app0/asset.dcx" : i==1 ? "/hostapp/asset.dcx" : "asset.dcx";
         int fd=(int)do_open(path,0,0); assert(fd>=3);
