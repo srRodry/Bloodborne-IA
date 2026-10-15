@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #define ERR(n) ((int32_t)(UINT32_C(0x80020000)|(n)))
@@ -44,6 +45,51 @@ static Mount mounts[MAX_MOUNTS];
 static size_t mount_count, opens, reads, writes, missing;
 static uint64_t bytes_read;
 static pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;
+
+/* The game's Dantelion2 FileTransferTask panics later than the I/O operation that failed. Keep a
+ * tiny lock-free crash history so the SIGSEGV handler can name the bad /app0 file. Writers may
+ * race; a partially written diagnostic is preferable to losing the path at crash time. */
+#define FILE_PROBLEM_SLOTS 8
+#define FILE_PROBLEM_LEN 512
+static char file_problems[FILE_PROBLEM_SLOTS][FILE_PROBLEM_LEN];
+static _Atomic unsigned file_problem_next;
+
+static int game_asset_path(const char *p) {
+    return p && ((!strncmp(p,"/app0",5) && (!p[5] || p[5]=='/')) ||
+                 (!strncmp(p,"/hostapp",8) && (!p[8] || p[8]=='/')));
+}
+static void note_file_problem(const char *operation,const char *guest,int error,long long offset,
+                              unsigned long long requested,long long received) {
+    if (!game_asset_path(guest)) return;
+    const unsigned slot=atomic_fetch_add_explicit(&file_problem_next,1,memory_order_relaxed)%FILE_PROBLEM_SLOTS;
+    if (error)
+        snprintf(file_problems[slot],FILE_PROBLEM_LEN,
+                 "Runtime file problem: %s %s failed: %s (errno %d, offset %lld, requested %llu)\n",
+                 operation,guest,strerror(error),error,offset,requested);
+    else
+        snprintf(file_problems[slot],FILE_PROBLEM_LEN,
+                 "Runtime file problem: %s %s returned %lld bytes (offset %lld, requested %llu)\n",
+                 operation,guest,received,offset,requested);
+}
+static void file_path_for_fd(int fd,char *out,size_t size) {
+    out[0]=0;
+    if (fd<3 || fd>=MAX_FILES) return;
+    pthread_mutex_lock(&lock);
+    if (files[fd].used) snprintf(out,size,"%s",files[fd].path);
+    pthread_mutex_unlock(&lock);
+}
+void runtime_file_dump_recent_problems(void) {
+    const unsigned next=atomic_load_explicit(&file_problem_next,memory_order_relaxed);
+    const unsigned count=next<FILE_PROBLEM_SLOTS ? next : FILE_PROBLEM_SLOTS;
+    if (!count) return;
+    static const char head[]="Recent game-file I/O problems (newest first):\n";
+    (void)write(2,head,sizeof(head)-1);
+    for (unsigned i=0;i<count;++i) {
+        const unsigned slot=(next-1-i)%FILE_PROBLEM_SLOTS;
+        const char *line=file_problems[slot];
+        if (line[0]) (void)write(2,line,strnlen(line,FILE_PROBLEM_LEN));
+    }
+}
 
 static int save_path(const char *p) { return p && !strncmp(p,"/savedata",9); }
 static int temp_name(const char *name) {
@@ -329,11 +375,16 @@ static int64_t do_open(const char *guest,int flags,int mode) {
     if (host<0) {
         e=errno;
         if (e==ENOENT) { ++missing; printf("Runtime: open(%s) -> not found\n",guest); }
+        note_file_problem("open",guest,e,0,0,-1);
         return -e;
     }
-    struct stat s;
+    struct stat s={0};
     Listing *dir=NULL;
-    if (!fstat(host,&s) && S_ISDIR(s.st_mode)) dir=list_directory(path);
+    if (!fstat(host,&s)) {
+        if (S_ISDIR(s.st_mode)) dir=list_directory(path);
+        else if (S_ISREG(s.st_mode) && s.st_size==0)
+            note_file_problem("open-zero-size",guest,0,0,0,0);
+    }
     pthread_mutex_lock(&lock);
     int fd=-1;
     for (int i=3;i<MAX_FILES;++i) if (!files[i].used) { fd=i; break; }
@@ -419,7 +470,16 @@ static int64_t do_read(int fd,void *buffer,uint64_t size) {
     runtime_memory_note_write((uintptr_t)buffer,size);
     touch_for_write(buffer,size);
     ssize_t n=read_retrying(h,buffer,size,0,0);
-    if (n<0) { if (audio_trace()) printf("Audio trace: read(fd %d, %llu) failed, errno %d\n",fd,(unsigned long long)size,errno); return -errno; }
+    if (n<0) {
+        char guest[512]; file_path_for_fd(fd,guest,sizeof(guest));
+        note_file_problem("read",guest,errno,-1,(unsigned long long)size,-1);
+        if (audio_trace()) printf("Audio trace: read(fd %d, %llu) failed, errno %d\n",fd,(unsigned long long)size,errno);
+        return -errno;
+    }
+    if (n==0 && size) {
+        char guest[512]; file_path_for_fd(fd,guest,sizeof(guest));
+        note_file_problem("read-eof",guest,0,-1,(unsigned long long)size,0);
+    }
     if (n>0) runtime_memory_note_write((uintptr_t)buffer,(uint64_t)n); /* and once the data is there */
     __atomic_add_fetch(&reads,1,__ATOMIC_RELAXED); __atomic_add_fetch(&bytes_read,(uint64_t)n,__ATOMIC_RELAXED);
     return n;
@@ -430,7 +490,16 @@ static int64_t do_pread(int fd,void *buffer,uint64_t size,int64_t offset) {
     runtime_memory_note_write((uintptr_t)buffer,size);
     touch_for_write(buffer,size);
     ssize_t n=read_retrying(h,buffer,size,offset,1);
-    if (n<0) { if (audio_trace()) printf("Audio trace: pread(fd %d, %llu @%lld) failed, errno %d\n",fd,(unsigned long long)size,(long long)offset,errno); return -errno; }
+    if (n<0) {
+        char guest[512]; file_path_for_fd(fd,guest,sizeof(guest));
+        note_file_problem("pread",guest,errno,(long long)offset,(unsigned long long)size,-1);
+        if (audio_trace()) printf("Audio trace: pread(fd %d, %llu @%lld) failed, errno %d\n",fd,(unsigned long long)size,(long long)offset,errno);
+        return -errno;
+    }
+    if (n==0 && size) {
+        char guest[512]; file_path_for_fd(fd,guest,sizeof(guest));
+        note_file_problem("pread-eof",guest,0,(long long)offset,(unsigned long long)size,0);
+    }
     if (n>0) runtime_memory_note_write((uintptr_t)buffer,(uint64_t)n); /* and once the data is there */
     __atomic_add_fetch(&reads,1,__ATOMIC_RELAXED); __atomic_add_fetch(&bytes_read,(uint64_t)n,__ATOMIC_RELAXED);
     return n;

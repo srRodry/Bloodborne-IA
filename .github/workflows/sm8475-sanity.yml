@@ -34,7 +34,10 @@ jobs:
             tools/android/build_arm64_bundle.py tools/android/build_thor_patch_parts.py scripts/game_check.py
 
       - name: Validate Bloodborne game-data checks
-        run: python3 -m unittest discover -s tests -p 'test_game_check.py'
+        run: |
+          python3 -m unittest discover -s tests -p 'test_game_check.py'
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pthread -I. -Isrc tests/test_file_mods.c -o /tmp/file-mods-test
+          /tmp/file-mods-test
 
       - name: Validate FEX profiles
         run: |

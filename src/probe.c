@@ -176,6 +176,9 @@ static void fault(int sig, siginfo_t *info, void *context) {
     else
         snprintf(line, sizeof(line), "Fault (signal %d) at RIP %p, address %p\n", sig, (void *)rip, info->si_addr);
     { ssize_t written_=write(2, line, strlen(line)); (void)written_; }
+    /* FileTransferTask.cpp reports its panic by faulting after the original I/O error. The file
+     * layer's recent-problem ring names that earlier /app0 operation without allocating here. */
+    runtime_file_dump_recent_problems();
     if (in_guest == GUEST_CPU_IN_HOST_CALL && regs.rip - (uintptr_t)image < 0x10000000) {
         snprintf(line, sizeof(line), "  called by the game at guest offset 0x%lx\n", (unsigned long)(regs.rip - (uintptr_t)image));
         ssize_t written_=write(2, line, strlen(line)); (void)written_;
