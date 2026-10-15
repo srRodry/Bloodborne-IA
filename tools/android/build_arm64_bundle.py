@@ -14,6 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'out/arm64'
+UPSTREAM_PATCH_PARTS = ROOT / '.local-deps/android/migration/x/bbport/arm64/patch-parts'
 OURS = {'libbbgpu.so': OUT / 'gpu/libbbgpu.so', 'libbbcpu.so': OUT / 'fex/libbbcpu.so'}
 # FFmpeg's libraries share internal symbols: always the same build of all of them.
 FFMPEG = ('libavformat.so.61', 'libavcodec.so.61', 'libavutil.so.59', 'libswscale.so.8',
@@ -62,9 +63,22 @@ def main():
     (stage / 'lib').mkdir()
     shutil.copy2(OUT / 'bb-probe', stage / 'bin/bb-probe')
     shutil.copy2(OUT / 'kgsl-chip-id', stage / 'bin/kgsl-chip-id')
-    # The game patches the settings screen chooses from (run-thor.sh), compiled here.
-    subprocess.run([sys.executable, str(ROOT / 'tools/android/build_thor_patch_parts.py'),
-                    '--out', str(stage / 'patch-parts')], check=True)
+    # The game patches selected by run-thor.sh. A developer build can regenerate these from
+    # their own 1.09 eboot. CI intentionally has no game executable, so reuse only the precompiled
+    # game-free patch-parts from the pinned, SHA-256-verified upstream runtime.
+    patch_parts = stage / 'patch-parts'
+    eboot = ROOT / 'out/eboot.elf'
+    if eboot.is_file():
+        subprocess.run([sys.executable, str(ROOT / 'tools/android/build_thor_patch_parts.py'),
+                        '--out', str(patch_parts), '--eboot', str(eboot)], check=True)
+        print(f'Patch parts: compiled from local {eboot}')
+    elif UPSTREAM_PATCH_PARTS.is_dir() and any(UPSTREAM_PATCH_PARTS.glob('*.bin')):
+        shutil.copytree(UPSTREAM_PATCH_PARTS, patch_parts)
+        print(f'Patch parts: reused pinned upstream runtime ({UPSTREAM_PATCH_PARTS})')
+    else:
+        raise SystemExit(
+            'No patch-parts available: run bootstrap_release_rootfs.py or provide out/eboot.elf'
+        )
     # FSR 4 model assets (tools/fetch_fsr4_assets.sh, not in the repository), when fetched.
     if (ROOT / 'fsr4_shaders').is_dir():
         shutil.copytree(ROOT / 'fsr4_shaders', stage / 'fsr4_shaders')
