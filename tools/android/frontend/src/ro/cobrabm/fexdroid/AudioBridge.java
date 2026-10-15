@@ -3,6 +3,8 @@ package ro.cobrabm.fexdroid;
 import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioTrack;
+import android.os.Process;
+import android.os.SystemClock;
 import android.system.Os;
 import android.system.OsConstants;
 import java.io.File;
@@ -34,6 +36,10 @@ final class AudioBridge {
 
     private void run() {
         try {
+            // Java MAX_PRIORITY does not map to Android's dedicated audio scheduling class.
+            // Ask the platform for urgent-audio priority as well; failure is non-fatal.
+            try { Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO); }
+            catch (Exception ignored) {}
             if (fifo.exists() && !isFifo(fifo)) fifo.delete();
             if (!fifo.exists()) Os.mkfifo(fifo.getPath(),0600);
             try (RandomAccessFile pipe=new RandomAccessFile(fifo,"rw");
@@ -52,14 +58,32 @@ final class AudioBridge {
                     .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY).build();
                 track=t; t.play();
                 byte[] buffer=new byte[4096];
-                int carry=0;
+                int carry=0, lastUnderruns=t.getUnderrunCount();
+                long lastUnderrunCheck=SystemClock.uptimeMillis();
                 while (running) {
                     int n=in.read(buffer,carry,buffer.length-carry);
                     if (n<=0) { Thread.sleep(5); continue; }
                     int whole=(carry+n)/FRAME*FRAME;
-                    t.write(buffer,0,whole);
+                    // AudioTrack may legally accept fewer bytes than requested even in stream mode.
+                    // Dropping that remainder corrupts the PCM cadence under load, so drain every
+                    // complete frame before reading the FIFO again.
+                    int offset=0;
+                    while (running && offset<whole) {
+                        int wrote=t.write(buffer,offset,whole-offset,AudioTrack.WRITE_BLOCKING);
+                        if (wrote<0) throw new java.io.IOException("AudioTrack.write failed: "+wrote);
+                        if (wrote==0) { Thread.yield(); continue; }
+                        offset+=wrote;
+                    }
                     carry=carry+n-whole;
                     if (carry>0) System.arraycopy(buffer,whole,buffer,0,carry);
+                    long now=SystemClock.uptimeMillis();
+                    if (now-lastUnderrunCheck>=5000) {
+                        int underruns=t.getUnderrunCount();
+                        if (underruns>lastUnderruns)
+                            android.util.Log.w("Bloodborne","audio underruns +"+(underruns-lastUnderruns)
+                                +" (total "+underruns+")");
+                        lastUnderruns=underruns; lastUnderrunCheck=now;
+                    }
                 }
                 t.stop(); t.release(); track=null;
             }
