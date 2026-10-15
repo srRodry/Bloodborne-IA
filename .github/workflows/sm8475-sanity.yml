@@ -8,6 +8,11 @@ on:
     paths:
       - "tools/android/**"
       - "src/probe.c"
+      - "src/runtime.h"
+      - "src/runtime_file.c"
+      - "scripts/game_check.py"
+      - "tests/test_game_check.py"
+      - "tests/test_file_mods.c"
       - ".github/workflows/sm8475-sanity.yml"
 
 jobs:
