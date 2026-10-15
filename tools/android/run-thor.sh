@@ -23,6 +23,15 @@ setting() { sed -n "s/^$1=//p" "$BB_CONFIG" 2>/dev/null | tail -n 1; }
 # Adreno 8xx (0x44..., e.g. the 8 Elite's 830). BB_TURNIP=main|gen8 overrides that choice.
 gpu_driver=$(setting gpu_driver)
 case $gpu_driver in .*|*/*) gpu_driver= ;; esac
+kgsl_chip=$("$base/arm64/bin/kgsl-chip-id" 2>/dev/null || true)
+page_size=$(getconf PAGESIZE 2>/dev/null || true)
+cpu_features=$(sed -n 's/^Features[[:space:]]*:[[:space:]]*//p' /proc/cpuinfo 2>/dev/null | head -n 1)
+case " $cpu_features " in *" sve2 "*) sve2=yes ;; *) sve2=no ;; esac
+echo "Device probe: KGSL=${kgsl_chip:-unknown}, page=${page_size:-unknown}, SVE2=$sve2"
+if [ -n "$page_size" ] && [ "$page_size" != 4096 ]; then
+    echo "Unsupported Android page size: $page_size (this runtime currently requires 4096)" >&2
+    exit 2
+fi
 if [ -n "$gpu_driver" ] && [ -f "$files/drivers/$gpu_driver/icd.json" ]; then
     icd="$files/drivers/$gpu_driver/icd.json"
     export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$files/drivers/$gpu_driver"
@@ -31,7 +40,7 @@ else
     [ -n "$gpu_driver" ] && echo "GPU driver $gpu_driver is not installed: automatic choice"
     turnip=${BB_TURNIP:-}
     if [ -z "$turnip" ]; then
-        case $("$base/arm64/bin/kgsl-chip-id" 2>/dev/null || true) in
+        case $kgsl_chip in
             0x44*) turnip=gen8 ;;
             *) turnip=main ;;
         esac
