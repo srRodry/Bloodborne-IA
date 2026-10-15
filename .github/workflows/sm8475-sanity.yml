@@ -31,7 +31,10 @@ jobs:
       - name: Validate Python build scripts
         run: |
           python3 -m py_compile tools/android/build_release_runtime.py tools/android/bootstrap_release_rootfs.py \
-            tools/android/build_arm64_bundle.py tools/android/build_thor_patch_parts.py
+            tools/android/build_arm64_bundle.py tools/android/build_thor_patch_parts.py scripts/game_check.py
+
+      - name: Validate Bloodborne game-data checks
+        run: python3 -m unittest discover -s tests -p 'test_game_check.py'
 
       - name: Validate FEX profiles
         run: |

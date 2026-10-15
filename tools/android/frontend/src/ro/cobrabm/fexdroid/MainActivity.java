@@ -1110,6 +1110,9 @@ public final class MainActivity extends Activity {
                         if (code==139) message+=" Native segmentation fault.";
                         if (!profile.isEmpty()) message+="\n"+profile;
                         if (!detail.isEmpty()) message+="\nLast runtime line: "+detail;
+                        if (detail.contains("0x20b56d2"))
+                            message+="\nKnown FileTransferTask fault: verify a clean, fully replaced 1.09 update "
+                                +"and temporarily disable loose mods.";
                         if (!memory.isEmpty()) message+="\n"+memory;
                         error(message+"\nOpen the menu to restart.");
                     }

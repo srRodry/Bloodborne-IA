@@ -83,6 +83,27 @@ class GameCheckTests(unittest.TestCase):
         with mock.patch.object(game_check, 'SUPPORTED_IMAGE', game_check.image_sha256(game)):
             self.assertIsNone(game_check.problem(game))
 
+    def layout(self, game, payload):
+        path = game / game_check.CHECKED_LAYOUT
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(dcx(payload))
+        return path
+
+    def test_old_world_layout_with_109_eboot_is_rejected(self):
+        game = self.game('CUSA03173', '01.09')
+        self.layout(game, b'old base-game world layout')
+        with mock.patch.object(game_check, 'SUPPORTED_IMAGE', game_check.image_sha256(game)):
+            self.assertEqual(game_check.problem(game)[0], 'stale_update_data')
+
+    def test_known_109_world_layout_passes(self):
+        game = self.game('CUSA03173', '01.09')
+        payload = b'fixture 1.09 world layout'
+        self.layout(game, payload)
+        with (mock.patch.object(game_check, 'SUPPORTED_IMAGE', game_check.image_sha256(game)),
+              mock.patch.object(game_check, 'LAYOUT_109_SHA256',
+                                __import__('hashlib').sha256(payload).hexdigest())):
+            self.assertIsNone(game_check.problem(game))
+
     def test_damaged_shaders(self):
         # As LibOrbisPkg on .NET 6+ (issue #81): part of the data replaced by stale bytes.
         game = self.game('CUSA03173', '01.09')
@@ -117,7 +138,7 @@ class GameCheckTests(unittest.TestCase):
 
     def test_every_problem_is_explained(self):
         for kind in ('missing_update', 'wrong_eboot', 'patched_eboot', 'other_title',
-                     'unreadable', 'damaged_files'):
+                     'unreadable', 'stale_update_data', 'damaged_files'):
             self.assertIn('CUSA', game_check.explain(kind, 'CUSA03173', '01.00'))
 
 

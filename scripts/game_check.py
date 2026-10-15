@@ -31,6 +31,12 @@ SUPPORTED_IMAGE = '071df19c8880086d97182dbc057bc8cb37badaca57d9112683836b24a0444
 LANCE_60FPS_IMAGE = 'bbc91f4dff6bc3118b039464289e39878a8fdfc802a07fab9d5fe84d935a676f'
 # The game loads these first; a broken extraction damages most files, these among them.
 CHECKED_FOLDER = 'dvdroot_ps4/shader'
+# A known 1.09 world-layout marker. A mixed base/update folder can have the correct 1.09 eboot and
+# param.sfo yet retain older data files; Dantelion2 then panics in FileTransferTask.cpp(865) and
+# bbport faults at guest offset 0x20b56d2 when entering the world. The decompressed Hunter's Dream
+# layout is stable across the supported retail 1.09 releases.
+CHECKED_LAYOUT = 'dvdroot_ps4/map/mapstudio/m21_00_00_00.msb.dcx'
+LAYOUT_109_SHA256 = '8e1de0ee223cd5137a93383cfc7bb1d27964bc480c63e35013674717b403ef8f'
 
 
 def image_sha256(game):
@@ -63,12 +69,49 @@ def broken_files(game, folder=CHECKED_FOLDER):
     return [str(f.relative_to(root)) for f in sorted((root / folder).rglob('*.dcx')) if dcx_broken(f)]
 
 
+def dflt_payload(path):
+    """The decompressed payload of a DFLT DCX, None for another compression; ValueError if damaged."""
+    data = Path(path).read_bytes()
+    if data[:4] != b'DCX\0' or data[0x18:0x1C] != b'DCS\0' or data[0x28:0x2C] != b'DFLT':
+        return None
+    if len(data) < 0x4C:
+        raise ValueError('short DCX header')
+    size, packed = struct.unpack_from('>II', data, 0x1C)
+    if 0x4C + packed > len(data):
+        raise ValueError('truncated DCX payload')
+    try:
+        payload = zlib.decompress(data[0x4C:0x4C + packed])
+    except zlib.error as error:
+        raise ValueError(f'DCX zlib error: {error}') from error
+    if len(payload) != size:
+        raise ValueError(f'DCX size mismatch: {len(payload)} != {size}')
+    return payload
+
+
+def stale_update_data(game):
+    """True when a known 1.09 world layout is present but is not the 1.09 version.
+
+    Absence is not treated as proof here: some test/minimal layouts do not carry the world data.
+    A real mixed base/update dump normally has this file, but with the older payload.
+    """
+    path = Path(game) / CHECKED_LAYOUT
+    if not path.is_file():
+        return False
+    try:
+        payload = dflt_payload(path)
+    except (OSError, ValueError):
+        return True
+    if payload is None:
+        return False
+    return hashlib.sha256(payload).hexdigest() != LAYOUT_109_SHA256
+
+
 def problem(game, image_hash=None):
     """None for the supported game, else (kind, title, version): kind is 'missing_update' (base
     game or an older update), 'wrong_eboot' (param.sfo says 1.09, eboot.bin is another version),
     'patched_eboot' (the 1.09 eboot.bin with a 60 fps patch baked in), 'other_title' (another
-    edition), 'unreadable' or 'damaged_files' (the right game, but its shaders do not unpack: a
-    broken extraction)."""
+    edition), 'unreadable', 'stale_update_data' (1.09 executable with older world data) or
+    'damaged_files' (the right game, but its shaders do not unpack: a broken extraction)."""
     if os.environ.get('BB_SKIP_GAME_CHECK') == '1':
         return None
     from prepare import sfo
@@ -80,6 +123,8 @@ def problem(game, image_hash=None):
     try:
         image_hash = image_hash or image_sha256(game)
         if image_hash == SUPPORTED_IMAGE:
+            if stale_update_data(game):
+                return 'stale_update_data', title, version
             return ('damaged_files', title, version) if broken_files(game) else None
     except (OSError, ValueError, IndexError, StopIteration, KeyError):
         return 'unreadable', title, version
@@ -109,6 +154,13 @@ def explain(kind, title, version):
                        '(any region, The Old Hunters editions too) with update 1.09.',
         'unreadable': f'{found} eboot.bin could not be read as a decrypted PS4 executable: dump '
                       'the game and the 1.09 update again.',
+        'stale_update_data': f'{found} The executable is 1.09, but {CHECKED_LAYOUT} is not the '
+                             '1.09 world layout. This mixed base/update state is known to crash in '
+                             'Dantelion2 FileTransferTask.cpp(865), guest offset 0x20b56d2, while '
+                             'entering the world. Copy every file from the 1.09 update over the base '
+                             'game again and REPLACE existing files; do not choose Skip. If files '
+                             'were modified directly by a mod, restore the clean 1.09 game data and '
+                             'use the app\'s separate Mods folder instead.',
         'damaged_files': f'{found} The game files are damaged: the shaders in {CHECKED_FOLDER} do '
                          'not unpack, and the game would hang while loading them. The extraction '
                          'tool left parts of compressed sectors stale (LibOrbisPkg PkgTool on '
