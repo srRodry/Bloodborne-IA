@@ -606,6 +606,8 @@ int main(int argc, char **argv) {
         } else {
             printf("Game identity: TITLE_ID=%s from app0 (no BB_GAME_DIR fallback)\n",serial);
         }
+        if (!strcmp(serial,"UNKNOWN"))
+            fprintf(stderr,"Game identity WARNING: TITLE_ID unresolved; Bloodborne profile cannot be selected\n");
         uint64_t sdk=0;
         if (procparam) memcpy(&sdk,image+procparam+16,8); /* procparam: size, magic, count, sdk_version */
         BbGpuConfig gpu={title,serial,user_dir ? user_dir : "user",(uint32_t)sdk,attributes,1920,1080};
