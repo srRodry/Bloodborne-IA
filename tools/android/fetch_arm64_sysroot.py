@@ -25,6 +25,9 @@ WANTED = [
     'libvulkan-dev', 'libfmt-dev', 'libxxhash-dev', 'libsdl3-dev', 'libx11-dev', 'libzydis-dev',
     'libavformat-dev', 'libavcodec-dev', 'libavutil-dev', 'libswscale-dev', 'libswresample-dev',
     'spirv-headers', 'zlib1g-dev',
+    # Header-only/CMake packages used by the native renderer. Keeping them in the target sysroot
+    # removes the old dependency on a developer's private .local-deps/root/usr tree.
+    'libboost1.83-dev', 'libmagicenum-dev', 'robin-map-dev', 'libvulkan-memory-allocator-dev',
 ]
 # Not needed to compile or link (package management, scripts, documentation, data).
 SKIP = re.compile(r'^(debconf|perl.*|dpkg|adduser|tzdata|sensible-utils|libc-bin|libc-dev-bin|'
