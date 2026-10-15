@@ -103,6 +103,8 @@ def main() -> None:
 
         if ROOTFS.exists():
             shutil.rmtree(ROOTFS)
+        if PATCH_PARTS.exists():
+            shutil.rmtree(PATCH_PARTS)
         MIGRATION.mkdir(parents=True, exist_ok=True)
         with tarfile.open(payload, "r:gz") as tar:
             members = list(safe_runtime_members(tar))
