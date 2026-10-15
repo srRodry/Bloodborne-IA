@@ -157,14 +157,17 @@ if [ -z "${BB_GC_BUDGET_MB:-}" ]; then
         *) [ "$mem_kb" -lt 14680064 ] && BB_GC_BUDGET_MB=3072 || BB_GC_BUDGET_MB=4096 ;;
     esac
 fi
-if [ -z "${BB_VRAM_IDLE_SECONDS:-}" ]; then
+# The texture collector reads BB_GC_IDLE_SECONDS. Accept the old local override name too,
+# but export the variable the renderer actually consumes.
+BB_GC_IDLE_SECONDS=${BB_GC_IDLE_SECONDS:-${BB_VRAM_IDLE_SECONDS:-}}
+if [ -z "$BB_GC_IDLE_SECONDS" ]; then
     case $mem_kb in
-        ''|*[!0-9]*) BB_VRAM_IDLE_SECONDS=15 ;;
-        *) [ "$mem_kb" -lt 14680064 ] && BB_VRAM_IDLE_SECONDS=15 || BB_VRAM_IDLE_SECONDS=20 ;;
+        ''|*[!0-9]*) BB_GC_IDLE_SECONDS=15 ;;
+        *) [ "$mem_kb" -lt 14680064 ] && BB_GC_IDLE_SECONDS=15 || BB_GC_IDLE_SECONDS=20 ;;
     esac
 fi
-export BB_GC_BUDGET_MB BB_VRAM_IDLE_SECONDS
-echo "Memory profile: MemTotal=${mem_kb:-unknown} KiB, texture budget=${BB_GC_BUDGET_MB} MiB, idle=${BB_VRAM_IDLE_SECONDS}s"
+export BB_GC_BUDGET_MB BB_GC_IDLE_SECONDS
+echo "Memory profile: MemTotal=${mem_kb:-unknown} KiB, texture budget=${BB_GC_BUDGET_MB} MiB, idle=${BB_GC_IDLE_SECONDS}s"
 # FPS limit (fps_limit): 30 is the game's own timing; above it the delta-time patch
 # (fps=uncap.bin) with presents at once (vblank 480 Hz, as run.sh) and BB_FPS_LIMIT (0: none).
 fps_limit=$(setting fps_limit)
