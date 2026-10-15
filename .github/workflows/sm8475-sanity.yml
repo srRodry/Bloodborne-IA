@@ -23,7 +23,7 @@ jobs:
 
       - name: Validate Python build scripts
         run: |
-          python3 -m py_compile tools/android/build_release_runtime.py tools/android/bootstrap_release_rootfs.py
+          python3 -m py_compile tools/android/build_release_runtime.py tools/android/bootstrap_release_rootfs.py tools/android/build_arm64_bundle.py
 
       - name: Validate FEX profiles
         run: |
@@ -73,6 +73,8 @@ jobs:
           test -x .local-deps/android/migration/x/rootfs/usr/bin/Xvfb
           test -f .local-deps/android/migration/x/rootfs/usr/lib/aarch64-linux-gnu/libvulkan_freedreno.so
           test -s .local-deps/android/device-libs.txt
+          test -d .local-deps/android/migration/x/bbport/arm64/patch-parts
+          test -n "$(find .local-deps/android/migration/x/bbport/arm64/patch-parts -maxdepth 1 -name '*.bin' -print -quit)"
           test -f .local-deps/android/upstream/Bloodborne-0.8.4.apk
           python3 - <<'PY'
           import json
@@ -80,6 +82,7 @@ jobs:
           p = json.loads(Path('.local-deps/android/upstream-runtime.json').read_text())
           assert p['apkSha256'] == '6b100906a25b55ba5ac38a9d8191178bda09955d0a469230a15a3de83f4104d9'
           assert len(p['runtimeSha256']) == 64
+          assert p['patchParts'].endswith('bbport/arm64/patch-parts')
           root = Path('.local-deps/android/migration/x/rootfs')
           forbidden = {'eboot.bin', 'boot-linked.bin', 'Lossless.dll'}
           found = [x.name for x in root.rglob('*') if x.name in forbidden]
