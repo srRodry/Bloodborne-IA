@@ -18,12 +18,19 @@ jobs:
       - name: Validate Android launcher shell
         run: |
           dash -n tools/android/run-thor.sh
-          bash -n tools/android/build_arm64.sh
-          bash -n tools/android/build_release_apk.sh
+          for script in tools/android/bootstrap_build_deps.sh tools/android/build_arm64.sh \
+                        tools/android/build_frontend.sh tools/android/build_lsfg.sh \
+                        tools/android/build_pkg_tool.sh tools/android/build_release_apk.sh \
+                        tools/android/fetch_steam_libs.sh; do
+            bash -n "$script"
+          done
+          ! grep -q 'rg --files' tools/android/build_frontend.sh
+          grep -q 'No Android frontend Java sources found' tools/android/build_frontend.sh
 
       - name: Validate Python build scripts
         run: |
-          python3 -m py_compile tools/android/build_release_runtime.py tools/android/bootstrap_release_rootfs.py tools/android/build_arm64_bundle.py
+          python3 -m py_compile tools/android/build_release_runtime.py tools/android/bootstrap_release_rootfs.py \
+            tools/android/build_arm64_bundle.py tools/android/build_thor_patch_parts.py
 
       - name: Validate FEX profiles
         run: |

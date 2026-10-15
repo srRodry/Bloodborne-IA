@@ -37,14 +37,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             clang lld llvm cmake ninja-build pkg-config patchelf patch \
-            glslang-tools spirv-tools \
-            python3 python3-venv python3-pip git curl unzip zip ca-certificates
-          python3 -m pip install --break-system-packages Pillow
+            glslang-tools spirv-tools binutils findutils \
+            python3 python3-venv git curl unzip zip ca-certificates \
+            openjdk-17-jdk-headless
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> "$GITHUB_ENV"
+          echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> "$GITHUB_PATH"
 
       - name: Install Android SDK components
         run: |
+          test -x "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Preflight host and Android toolchain
+        run: |
+          set -euo pipefail
+          for cmd in bash git cmake ninja clang clang++ ld.lld llvm-strip llvm-readelf \
+                     pkg-config patchelf patch python3 curl unzip zip tar sed grep find sort \
+                     sha256sum sha512sum javac java keytool; do
+            command -v "$cmd" >/dev/null || { echo "missing tool: $cmd" >&2; exit 1; }
+          done
+          for tool in aapt d8 zipalign apksigner; do
+            test -x "$ANDROID_SDK_ROOT/build-tools/35.0.0/$tool" ||
+              { echo "missing Android tool: $tool" >&2; exit 1; }
+          done
+          test -f "$ANDROID_SDK_ROOT/platforms/android-35/android.jar"
+          java -version
+          javac -version
 
       - name: Restore dependency cache
         id: deps-cache
@@ -58,11 +77,29 @@ jobs:
             .local-deps/android/mesa-sysroot
             .local-deps/android/mesa-venv
             .local-deps/android/src
+            .local-deps/android/maven
+            .local-deps/android/m2
+            .local-deps/android/steam-libs
             .local-deps/src
-          key: sm8475-deps-v1-${{ runner.os }}-${{ hashFiles('tools/android/bootstrap_build_deps.sh', 'tools/android/bootstrap_release_rootfs.py', 'tools/android/fetch_arm64_sysroot.py', 'tools/android/build_turnip.sh') }}
+          key: sm8475-deps-v2-${{ runner.os }}-${{ hashFiles('tools/android/bootstrap_build_deps.sh', 'tools/android/bootstrap_release_rootfs.py', 'tools/android/fetch_arm64_sysroot.py', 'tools/android/build_turnip.sh', 'tools/android/fetch_steam_libs.sh') }}
 
       - name: Recreate pinned build inputs
         run: bash tools/android/bootstrap_build_deps.sh
+
+      - name: Validate pinned build inputs
+        run: |
+          set -euo pipefail
+          test -x .local-deps/android/migration/x/rootfs/usr/bin/FEX
+          test -f .local-deps/android/arm64-sysroot/usr/lib/aarch64-linux-gnu/libc.so.6
+          test -f .local-deps/android/arm64-prefix/lib/libminiz.a
+          test -f .local-deps/src/ps4-pkg-tools/CMakeLists.txt
+          test -f .local-deps/src/ps4-pkg-tools/externals/cryptopp/cryptlib.h
+          test -d .local-deps/android/migration/x/bbport/arm64/patch-parts
+          test -n "$(find .local-deps/android/migration/x/bbport/arm64/patch-parts -maxdepth 1 -type f -name '*.bin' -print -quit)"
+          test -s .local-deps/android/device-libs.txt
+
+      - name: Frontend compile smoke check
+        run: bash tools/android/build_frontend.sh
 
       - name: Save dependency cache
         if: steps.deps-cache.outputs.cache-hit != 'true'
@@ -76,6 +113,9 @@ jobs:
             .local-deps/android/mesa-sysroot
             .local-deps/android/mesa-venv
             .local-deps/android/src
+            .local-deps/android/maven
+            .local-deps/android/m2
+            .local-deps/android/steam-libs
             .local-deps/src
           key: ${{ steps.deps-cache.outputs.cache-primary-key }}
 
@@ -86,9 +126,16 @@ jobs:
           path: out/arm64/turnip
           key: sm8475-turnip-v1-${{ runner.os }}-${{ hashFiles('tools/android/build_turnip.sh', 'tools/android/mesa-patches/**/*.patch') }}
 
-      - name: Build Turnip for Adreno 6xx/7xx
-        if: steps.turnip-cache.outputs.cache-hit != 'true'
-        run: bash tools/android/build_turnip.sh main
+      - name: Build or verify Turnip for Adreno 6xx/7xx
+        run: |
+          if [[ "${{ steps.turnip-cache.outputs.cache-hit }}" != "true" ]] ||
+             [[ ! -s out/arm64/turnip/libvulkan_freedreno.so ]] ||
+             [[ ! -s out/arm64/turnip/freedreno_icd.aarch64.json ]]; then
+            rm -rf out/arm64/turnip
+            bash tools/android/build_turnip.sh main
+          fi
+          test -s out/arm64/turnip/libvulkan_freedreno.so
+          test -s out/arm64/turnip/freedreno_icd.aarch64.json
 
       - name: Save Turnip cache
         if: steps.turnip-cache.outputs.cache-hit != 'true'
@@ -110,9 +157,19 @@ jobs:
             out/arm64/kgsl-chip-id
           key: sm8475-native-v1-${{ runner.os }}-${{ hashFiles('cpu/**', 'gpu/**', 'src/**', 'third_party/FEX/**', 'third_party/LibAtrac9/**', 'tools/android/build_arm64.sh', 'tools/android/aarch64-toolchain.cmake', 'tools/android/bootstrap_build_deps.sh') }}
 
-      - name: Build native ARM64 runtime and FEXCore
-        if: steps.native-cache.outputs.cache-hit != 'true'
-        run: bash tools/android/build_arm64.sh
+      - name: Build or verify native ARM64 runtime and FEXCore
+        run: |
+          if [[ "${{ steps.native-cache.outputs.cache-hit }}" != "true" ]] ||
+             [[ ! -s out/arm64/fex/libbbcpu.so ]] ||
+             [[ ! -s out/arm64/gpu/libbbgpu.so ]] ||
+             [[ ! -x out/arm64/bb-probe ]] ||
+             [[ ! -x out/arm64/kgsl-chip-id ]]; then
+            bash tools/android/build_arm64.sh
+          fi
+          test -s out/arm64/fex/libbbcpu.so
+          test -s out/arm64/gpu/libbbgpu.so
+          test -x out/arm64/bb-probe
+          test -x out/arm64/kgsl-chip-id
 
       - name: Save native ARM64 cache
         if: steps.native-cache.outputs.cache-hit != 'true'
@@ -137,18 +194,57 @@ jobs:
         run: |
           python3 tools/android/build_arm64_bundle.py \
             --device-libs .local-deps/android/device-libs.txt
+          test -x out/arm64/bundle/bin/bb-probe
+          test -s out/arm64/bundle/lib/libbbcpu.so
+          test -s out/arm64/bundle/lib/libbbgpu.so
+          test -n "$(find out/arm64/bundle/patch-parts -maxdepth 1 -type f -name '*.bin' -print -quit)"
+          test -s out/arm64/bundle/manifest.json
 
       - name: Build SM8475 APK
         run: |
           BB_RELEASE_GPU_FAMILY=sm8475 bash tools/android/build_release_apk.sh
 
-      - name: Verify APK contains no game executable
+      - name: Verify APK integrity and contents
         run: |
-          apk="$(ls out/release/Bloodborne-*.apk | head -n1)"
+          set -euo pipefail
+          apk="$(find out/release -maxdepth 1 -type f -name 'Bloodborne-*.apk' -print -quit)"
+          test -n "$apk"
+          test -s "$apk"
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          unzip -t "$apk" >/dev/null
           unzip -l "$apk" > /tmp/apk-list.txt
-          ! grep -Ei '(^|/)(eboot\.bin|boot-linked\.bin|Lossless\.dll)$' /tmp/apk-list.txt
+          grep -q 'assets/runtime.payload' /tmp/apk-list.txt
+          grep -q 'assets/runtime.sha256' /tmp/apk-list.txt
+          grep -q 'lib/arm64-v8a/libfxdisplay.so' /tmp/apk-list.txt
+          grep -q 'lib/arm64-v8a/libfxio.so' /tmp/apk-list.txt
+          ! grep -Ei '(^|/)(eboot\.bin|boot-linked\.bin|eboot\.elf|Lossless\.dll)
+
+      - name: Upload test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bloodborne-SM8475-test
+          path: |
+            out/release/Bloodborne-*.apk
+            out/release/Bloodborne-*.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
+ /tmp/apk-list.txt
+          ! tar -tzf out/release/runtime.tar.gz | grep -Ei '(^|/)(eboot\.bin|boot-linked\.bin|eboot\.elf|Lossless\.dll)
+
+      - name: Upload test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bloodborne-SM8475-test
+          path: |
+            out/release/Bloodborne-*.apk
+            out/release/Bloodborne-*.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+          unzip -p "$apk" assets/runtime.sha256 > /tmp/apk-runtime.sha256
+          cmp -s /tmp/apk-runtime.sha256 out/release/runtime.sha256
           sha256sum "$apk"
-          ls -lh "$apk"
+          ls -lh "$apk" out/release/runtime.tar.gz
 
       - name: Upload test APK
         uses: actions/upload-artifact@v4

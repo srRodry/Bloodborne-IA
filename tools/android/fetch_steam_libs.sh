@@ -16,12 +16,18 @@ out=$deps/steam-libs
 MAVEN_VERSION=3.9.11
 MAVEN_SHA512=bcfe4fe305c962ace56ac7b5fc7a08b87d5abd8b7e89027ab251069faebee516b0ded8961445d6d91ec1985dfe30f8153268843c89aa392733d1a3ec956c9978
 JAVASTEAM=1.8.0 XZ=1.12 ZSTD=1.5.7-6 ZXING=3.5.4 SPONGY=1.58.0.0 COMPRESS=1.26.1
+for cmd in curl sha512sum tar unzip find sort java grep; do
+    command -v "$cmd" >/dev/null 2>&1 || { echo "Missing required host tool: $cmd" >&2; exit 1; }
+done
 if [[ ! -x $deps/maven/bin/mvn ]]; then
     curl -sfL -o "$deps/maven.tar.gz" \
         "https://archive.apache.org/dist/maven/maven-3/$MAVEN_VERSION/binaries/apache-maven-$MAVEN_VERSION-bin.tar.gz"
     echo "$MAVEN_SHA512  $deps/maven.tar.gz" | sha512sum -c --quiet -
-    mkdir -p "$deps/maven" && tar -xzf "$deps/maven.tar.gz" -C "$deps/maven" --strip-components=1
+    rm -rf "$deps/maven"
+    mkdir -p "$deps/maven"
+    tar -xzf "$deps/maven.tar.gz" -C "$deps/maven" --strip-components=1
     rm "$deps/maven.tar.gz"
+    [[ -x $deps/maven/bin/mvn ]] || { echo 'Maven archive did not contain bin/mvn' >&2; exit 1; }
 fi
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 cat > "$work/pom.xml" <<EOF
@@ -51,5 +57,8 @@ for file in "$work"/deps/*; do
             cp "$work"/aar/jni/arm64-v8a/*.so "$out/jni/" ;;
     esac
 done
-ls "$out/jars" > "$out/jars.txt"
-echo "Steam libraries: $(wc -l < "$out/jars.txt") jars, $(ls "$out/jni") in $out"
+find "$out/jars" -maxdepth 1 -type f -name '*.jar' -printf '%f\n' | sort > "$out/jars.txt"
+[[ -s $out/jars.txt ]] || { echo 'Maven resolved no runtime jars' >&2; exit 1; }
+find "$out/jni" -maxdepth 1 -type f -name '*.so' -print -quit | grep -q . ||
+    { echo 'zstd-jni ARM64 library was not extracted' >&2; exit 1; }
+echo "Steam libraries: $(wc -l < "$out/jars.txt") jars in $out"
