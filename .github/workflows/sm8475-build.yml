@@ -37,6 +37,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             clang lld llvm cmake ninja-build pkg-config patchelf patch \
+            glslang-tools spirv-tools \
             python3 python3-venv python3-pip git curl unzip zip ca-certificates
           python3 -m pip install --break-system-packages Pillow
 
