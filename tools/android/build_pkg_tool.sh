@@ -57,6 +57,7 @@ C
 build_arm64() {
     [[ -f $sysroot/usr/lib/aarch64-linux-gnu/libc.so.6 ]] || { echo "No sysroot: $sysroot" >&2; exit 1; }
     local out=$root/out/arm64/pkg-tool build=$root/out/arm64/pkg-tool-build
+    mkdir -p "$build"
     local cc=(clang --target=aarch64-linux-gnu --sysroot="$sysroot")
     local object; object=$(shim "$build" "${cc[@]}")
     # Static: the vendored cryptopp, the sysroot's zlib (libz.a), libstdc++ and libgcc. Only libc, libm
@@ -78,6 +79,7 @@ build_arm64() {
 
 build_host() {
     local out=$root/out/host/pkg-tool build=$root/out/host/pkg-tool-build
+    mkdir -p "$build"
     local object; object=$(shim "$build" cc)
     cmake -S "$src" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PKG_QT_GUI=OFF \
         -DCRYPTOPP_BUILD_TESTING=OFF "-DCMAKE_EXE_LINKER_FLAGS=$object" \
