@@ -23,7 +23,7 @@ jobs:
 
       - name: Validate Python build scripts
         run: |
-          python3 -m py_compile tools/android/build_release_runtime.py
+          python3 -m py_compile tools/android/build_release_runtime.py tools/android/bootstrap_release_rootfs.py
 
       - name: Validate FEX profiles
         run: |
@@ -56,3 +56,34 @@ jobs:
           grep -q 'gpu_power=auto' tools/android/thor.ini
           grep -q 'FEX_PROFILE_VALUES' tools/android/frontend/src/ro/cobrabm/fexdroid/SettingsDialog.java
           grep -q 'cpuMaxFreqKHz' tools/android/frontend/src/ro/cobrabm/fexdroid/SettingsDialog.java
+
+
+  bootstrap-rootfs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Recreate pinned Android rootfs
+        run: python3 tools/android/bootstrap_release_rootfs.py
+
+      - name: Verify reconstructed inputs
+        run: |
+          test -x .local-deps/android/migration/x/rootfs/usr/bin/FEX
+          test -x .local-deps/android/migration/x/rootfs/usr/bin/Xvfb
+          test -f .local-deps/android/migration/x/rootfs/usr/lib/aarch64-linux-gnu/libvulkan_freedreno.so
+          test -s .local-deps/android/device-libs.txt
+          test -f .local-deps/android/upstream/Bloodborne-0.8.4.apk
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path('.local-deps/android/upstream-runtime.json').read_text())
+          assert p['apkSha256'] == '6b100906a25b55ba5ac38a9d8191178bda09955d0a469230a15a3de83f4104d9'
+          assert len(p['runtimeSha256']) == 64
+          root = Path('.local-deps/android/migration/x/rootfs')
+          forbidden = {'eboot.bin', 'boot-linked.bin', 'Lossless.dll'}
+          found = [x.name for x in root.rglob('*') if x.name in forbidden]
+          assert not found, found
+          print('runtime', p['runtimeSha256'])
+          print('device libs', len(Path('.local-deps/android/device-libs.txt').read_text().splitlines()))
+          PY
