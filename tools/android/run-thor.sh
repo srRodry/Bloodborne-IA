@@ -130,10 +130,24 @@ export BB_WINDOW_SIZE=1280x720
 export BB_RENDER_RES=$render BB_OUTPUT_RES=1280x720 BB_LIVE_RES=0
 export BB_DMEM_MB=5056 BB_PREUPLOAD=0 BB_GUEST_IN_PLACE=0 BB_UFFD=0
 export BB_COPY_GPU_BUFFERS=1 BB_GPU_WRITE_TWINS=1 BB_GPU_WRITE_TWINS_MAX=65536
-# GPU memory is the Thor's system RAM, shared with the game's 5 GB and Android: the texture
-# collector works to a 4 GB budget instead of the driver's 11 GB heap (the app was killed for
-# memory once the world loaded), and idle copies of game memory go after 20 s instead of 60 s.
-export BB_GC_BUDGET_MB=${BB_GC_BUDGET_MB:-4096} BB_VRAM_IDLE_SECONDS=${BB_VRAM_IDLE_SECONDS:-20}
+# GPU memory is shared system RAM. The original Thor profile used a 4 GiB texture budget
+# on a 16 GB device. On 12 GB-class phones that leaves too little headroom for Android, FEX,
+# direct memory and renderer allocations, so use a lower budget and evict idle copies sooner.
+mem_kb=$(awk '/^MemTotal:/{print $2; exit}' /proc/meminfo 2>/dev/null || true)
+if [ -z "${BB_GC_BUDGET_MB:-}" ]; then
+    case $mem_kb in
+        ''|*[!0-9]*) BB_GC_BUDGET_MB=3072 ;;
+        *) [ "$mem_kb" -lt 14680064 ] && BB_GC_BUDGET_MB=3072 || BB_GC_BUDGET_MB=4096 ;;
+    esac
+fi
+if [ -z "${BB_VRAM_IDLE_SECONDS:-}" ]; then
+    case $mem_kb in
+        ''|*[!0-9]*) BB_VRAM_IDLE_SECONDS=15 ;;
+        *) [ "$mem_kb" -lt 14680064 ] && BB_VRAM_IDLE_SECONDS=15 || BB_VRAM_IDLE_SECONDS=20 ;;
+    esac
+fi
+export BB_GC_BUDGET_MB BB_VRAM_IDLE_SECONDS
+echo "Memory profile: MemTotal=${mem_kb:-unknown} KiB, texture budget=${BB_GC_BUDGET_MB} MiB, idle=${BB_VRAM_IDLE_SECONDS}s"
 # FPS limit (fps_limit): 30 is the game's own timing; above it the delta-time patch
 # (fps=uncap.bin) with presents at once (vblank 480 Hz, as run.sh) and BB_FPS_LIMIT (0: none).
 fps_limit=$(setting fps_limit)
@@ -166,7 +180,23 @@ export SDL_GAMECONTROLLERCONFIG_FILE="$base/thor-gamecontrollerdb.txt"
 export BB_GAMEPAD='030018dc202000001201000000000000'
 export PULSE_SERVER="unix:$host/tmp/pulse/native" PULSE_LATENCY_MSEC=60
 mkdir -p "$HOME/.fex-emu" "$HOME/.cache/fex-emu" "$base/user" "$base/logs"
-cp "$base/fex-compatible.json" "$HOME/.fex-emu/Config.json"
+# FEX execution profile. "fast" preserves the old settings (TSO off); "balanced" restores
+# x86 memory ordering while retaining reduced x87 precision; "stable" additionally enables
+# vector/memcpy TSO and full x87 precision. Balanced is the default for device-focused builds.
+fex_profile=${BB_FEX_PROFILE:-$(setting fex_profile)}
+case $fex_profile in
+    fast) fex_config="$base/fex-compatible.json" ;;
+    stable) fex_config="$base/fex-stable.json" ;;
+    balanced|'') fex_profile=balanced; fex_config="$base/fex-balanced.json" ;;
+    *) echo "Unknown FEX profile '$fex_profile'; using balanced"; fex_profile=balanced; fex_config="$base/fex-balanced.json" ;;
+esac
+if [ ! -f "$fex_config" ]; then
+    echo "FEX profile file missing: $fex_config; falling back to legacy fast profile"
+    fex_profile=fast
+    fex_config="$base/fex-compatible.json"
+fi
+cp "$fex_config" "$HOME/.fex-emu/Config.json"
+echo "FEX profile: $fex_profile (${fex_config##*/})"
 # Local overrides for this device (experiments, tuning): sourced last, not part of the bundle.
 [ -f "$base/thor-local.sh" ] && . "$base/thor-local.sh"
 cd "$base"
