@@ -1024,6 +1024,52 @@ public final class MainActivity extends Activity {
             if (attrs.preferredDisplayModeId!=id) { attrs.preferredDisplayModeId=id; getWindow().setAttributes(attrs); }
         });
     }
+    /** Linux shells report a process killed by a signal as 128 + signal number. */
+    private static String exitSignal(int code) {
+        if (code<128 || code>255) return "";
+        switch (code-128) {
+            case 6: return "SIGABRT";
+            case 9: return "SIGKILL";
+            case 11: return "SIGSEGV";
+            case 15: return "SIGTERM";
+            default: return "signal "+(code-128);
+        }
+    }
+    /** Last useful native-runtime line. The complete stream remains in logs/android-game.log. */
+    private static String lastGameLogDetail(File file) {
+        java.util.ArrayDeque<String> tail=new java.util.ArrayDeque<>();
+        try (BufferedReader r=new BufferedReader(new java.io.FileReader(file))) {
+            for (String line; (line=r.readLine())!=null;) {
+                line=line.trim();
+                if (line.isEmpty()) continue;
+                if (tail.size()>=32) tail.removeFirst();
+                tail.addLast(line);
+            }
+        } catch (Exception ignored) {}
+        String fallback="";
+        for (java.util.Iterator<String> it=tail.descendingIterator(); it.hasNext();) {
+            String line=it.next();
+            if (fallback.isEmpty()) fallback=line;
+            String lower=line.toLowerCase(java.util.Locale.ROOT);
+            if (lower.contains("stop:") || lower.contains("critical") || lower.contains("fatal") ||
+                    lower.contains("error") || lower.contains("segmentation") ||
+                    lower.contains("fault") || lower.contains("device lost")) {
+                fallback=line;
+                break;
+            }
+        }
+        return fallback.length()>240 ? fallback.substring(0,240)+"…" : fallback;
+    }
+    /** Snapshot Android's memory state at the instant the child exits, useful to separate SIGSEGV from LMK/OOM. */
+    private String memoryAtExit() {
+        try {
+            android.app.ActivityManager manager=(android.app.ActivityManager)getSystemService(ACTIVITY_SERVICE);
+            android.app.ActivityManager.MemoryInfo info=new android.app.ActivityManager.MemoryInfo();
+            manager.getMemoryInfo(info);
+            return "RAM available: "+(info.availMem/(1024*1024))+" MiB · low-memory="+info.lowMemory;
+        } catch (Exception ignored) { return ""; }
+    }
+
     private void startGame() {
         if (destroyed) return;
         hadError=false;
@@ -1038,7 +1084,17 @@ public final class MainActivity extends Activity {
                      PrintWriter out=new PrintWriter(new File(BASE,"logs/android-game.log"))) {
                     String line; while ((line=r.readLine())!=null) { out.println(line); out.flush(); }
                     int code=launched.waitFor();
-                    if (game==launched) { game=null; error("Game stopped ("+code+"). Open the menu to restart."); }
+                    if (game==launched) {
+                        game=null;
+                        String signal=exitSignal(code);
+                        String detail=lastGameLogDetail(new File(BASE,"logs/android-game.log"));
+                        String memory=memoryAtExit();
+                        String message="Game stopped ("+code+(signal.isEmpty() ? "" : " · "+signal)+").";
+                        if (code==139) message+=" Native segmentation fault.";
+                        if (!detail.isEmpty()) message+="\nLast runtime line: "+detail;
+                        if (!memory.isEmpty()) message+="\n"+memory;
+                        error(message+"\nOpen the menu to restart.");
+                    }
                 } catch (Exception ex) {
                     // A restart (settings, cheats) kills this process on purpose: its reader is
                     // interrupted then, after the next game started. Only the current game's errors show.

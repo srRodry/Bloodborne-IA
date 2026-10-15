@@ -147,27 +147,18 @@ export BB_WINDOW_SIZE=1280x720
 export BB_RENDER_RES=$render BB_OUTPUT_RES=1280x720 BB_LIVE_RES=0
 export BB_DMEM_MB=5056 BB_PREUPLOAD=0 BB_GUEST_IN_PLACE=0 BB_UFFD=0
 export BB_COPY_GPU_BUFFERS=1 BB_GPU_WRITE_TWINS=1 BB_GPU_WRITE_TWINS_MAX=65536
-# GPU memory is shared system RAM. The original Thor profile used a 4 GiB texture budget
-# on a 16 GB device. On 12 GB-class phones that leaves too little headroom for Android, FEX,
-# direct memory and renderer allocations, so use a lower budget and evict idle copies sooner.
+# Keep the two renderer memory lifetimes separate. They control different caches:
+# BB_GC_IDLE_SECONDS is texture-cache eviction; BB_VRAM_IDLE_SECONDS is BufferCache residency.
+# The first SM8475 dev build accidentally stopped exporting BB_VRAM_IDLE_SECONDS, making buffer
+# copies fall back to 60 s instead of the upstream Android baseline of 20 s. Restore the proven
+# upstream lifetime/budget semantics before attempting any further memory optimisation.
+BB_GC_BUDGET_MB=${BB_GC_BUDGET_MB:-4096}
+BB_GC_IDLE_SECONDS=${BB_GC_IDLE_SECONDS:-20}
+BB_VRAM_IDLE_SECONDS=${BB_VRAM_IDLE_SECONDS:-20}
+export BB_GC_BUDGET_MB BB_GC_IDLE_SECONDS BB_VRAM_IDLE_SECONDS
 mem_kb=$(awk '/^MemTotal:/{print $2; exit}' /proc/meminfo 2>/dev/null || true)
-if [ -z "${BB_GC_BUDGET_MB:-}" ]; then
-    case $mem_kb in
-        ''|*[!0-9]*) BB_GC_BUDGET_MB=3072 ;;
-        *) [ "$mem_kb" -lt 14680064 ] && BB_GC_BUDGET_MB=3072 || BB_GC_BUDGET_MB=4096 ;;
-    esac
-fi
-# The texture collector reads BB_GC_IDLE_SECONDS. Accept the old local override name too,
-# but export the variable the renderer actually consumes.
-BB_GC_IDLE_SECONDS=${BB_GC_IDLE_SECONDS:-${BB_VRAM_IDLE_SECONDS:-}}
-if [ -z "$BB_GC_IDLE_SECONDS" ]; then
-    case $mem_kb in
-        ''|*[!0-9]*) BB_GC_IDLE_SECONDS=15 ;;
-        *) [ "$mem_kb" -lt 14680064 ] && BB_GC_IDLE_SECONDS=15 || BB_GC_IDLE_SECONDS=20 ;;
-    esac
-fi
-export BB_GC_BUDGET_MB BB_GC_IDLE_SECONDS
-echo "Memory profile: MemTotal=${mem_kb:-unknown} KiB, texture budget=${BB_GC_BUDGET_MB} MiB, idle=${BB_GC_IDLE_SECONDS}s"
+mem_avail_kb=$(awk '/^MemAvailable:/{print $2; exit}' /proc/meminfo 2>/dev/null || true)
+echo "Memory profile: MemTotal=${mem_kb:-unknown} KiB, MemAvailable=${mem_avail_kb:-unknown} KiB, texture budget=${BB_GC_BUDGET_MB} MiB, texture idle=${BB_GC_IDLE_SECONDS}s, buffer idle=${BB_VRAM_IDLE_SECONDS}s"
 # FPS limit (fps_limit): 30 is the game's own timing; above it the delta-time patch
 # (fps=uncap.bin) with presents at once (vblank 480 Hz, as run.sh) and BB_FPS_LIMIT (0: none).
 fps_limit=$(setting fps_limit)

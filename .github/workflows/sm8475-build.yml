@@ -98,8 +98,24 @@ jobs:
           test -n "$(find .local-deps/android/migration/x/bbport/arm64/patch-parts -maxdepth 1 -type f -name '*.bin' -print -quit)"
           test -s .local-deps/android/device-libs.txt
 
+      # This is deliberately a non-production test signer. Persisting it in the branch cache
+      # makes dev2+ test APKs update-compatible with each other; dev1 used an ephemeral key.
+      - name: Restore SM8475 test signing key
+        id: signing-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .local-deps/android/bloodborne-thor.keystore
+          key: sm8475-test-signing-v1
+
       - name: Frontend compile smoke check
         run: bash tools/android/build_frontend.sh
+
+      - name: Save SM8475 test signing key
+        if: steps.signing-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .local-deps/android/bloodborne-thor.keystore
+          key: sm8475-test-signing-v1
 
       - name: Save dependency cache
         if: steps.deps-cache.outputs.cache-hit != 'true'
