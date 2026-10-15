@@ -1060,6 +1060,21 @@ public final class MainActivity extends Activity {
         }
         return fallback.length()>240 ? fallback.substring(0,240)+"…" : fallback;
     }
+    /** Identity/profile lines make Android world-entry crashes immediately actionable. */
+    private static String gameProfileDetail(File file) {
+        String identity="", profile="";
+        try (BufferedReader r=new BufferedReader(new java.io.FileReader(file))) {
+            for (String line; (line=r.readLine())!=null;) {
+                line=line.trim();
+                if (line.startsWith("Game identity:")) identity=line;
+                else if (line.startsWith("Game profile:")) profile=line;
+            }
+        } catch (Exception ignored) {}
+        String joined=identity;
+        if (!profile.isEmpty()) joined+=(joined.isEmpty() ? "" : " · ")+profile;
+        return joined.length()>300 ? joined.substring(0,300)+"…" : joined;
+    }
+
     /** Snapshot Android's memory state at the instant the child exits, useful to separate SIGSEGV from LMK/OOM. */
     private String memoryAtExit() {
         try {
@@ -1087,10 +1102,13 @@ public final class MainActivity extends Activity {
                     if (game==launched) {
                         game=null;
                         String signal=exitSignal(code);
-                        String detail=lastGameLogDetail(new File(BASE,"logs/android-game.log"));
+                        File gameLog=new File(BASE,"logs/android-game.log");
+                        String detail=lastGameLogDetail(gameLog);
+                        String profile=gameProfileDetail(gameLog);
                         String memory=memoryAtExit();
                         String message="Game stopped ("+code+(signal.isEmpty() ? "" : " · "+signal)+").";
                         if (code==139) message+=" Native segmentation fault.";
+                        if (!profile.isEmpty()) message+="\n"+profile;
                         if (!detail.isEmpty()) message+="\nLast runtime line: "+detail;
                         if (!memory.isEmpty()) message+="\n"+memory;
                         error(message+"\nOpen the menu to restart.");

@@ -575,6 +575,37 @@ int main(int argc, char **argv) {
         sfo_value(sfo,"TITLE",title,sizeof(title),NULL);
         sfo_value(sfo,"TITLE_ID",serial,sizeof(serial),NULL);
         sfo_value(sfo,"ATTRIBUTE",NULL,0,&attributes);
+
+        /* Android may run app0 through the loose-mod symlink overlay. The Bloodborne game profile
+         * is selected from TITLE_ID, and running without that profile is known to crash with 139
+         * while entering the world. MainActivity exports BB_GAME_DIR as the original game folder,
+         * which prepare_game.py has already verified as a supported clean 1.09 image. Prefer that
+         * param.sfo for identity; app0 remains the source for runtime file accesses/mod overlays. */
+        const char *original_game=getenv("BB_GAME_DIR");
+        if (original_game && *original_game) {
+            char original_sfo[4096], original_title[128]="", original_serial[16]="";
+            uint32_t original_attributes=0;
+            snprintf(original_sfo,sizeof(original_sfo),"%s/sce_sys/param.sfo",original_game);
+            const int have_original_serial=
+                sfo_value(original_sfo,"TITLE_ID",original_serial,sizeof(original_serial),NULL);
+            if (have_original_serial && original_serial[0]) {
+                if (strcmp(serial,original_serial))
+                    printf("Game identity: app0 TITLE_ID=%s; original TITLE_ID=%s; using original\n",
+                           serial,original_serial);
+                else
+                    printf("Game identity: app0/original TITLE_ID=%s\n",original_serial);
+                snprintf(serial,sizeof(serial),"%s",original_serial);
+                if (sfo_value(original_sfo,"TITLE",original_title,sizeof(original_title),NULL) &&
+                    original_title[0])
+                    snprintf(title,sizeof(title),"%s",original_title);
+                if (sfo_value(original_sfo,"ATTRIBUTE",NULL,0,&original_attributes))
+                    attributes=original_attributes;
+            } else {
+                printf("Game identity: original param.sfo has no TITLE_ID; app0 TITLE_ID=%s\n",serial);
+            }
+        } else {
+            printf("Game identity: TITLE_ID=%s from app0 (no BB_GAME_DIR fallback)\n",serial);
+        }
         uint64_t sdk=0;
         if (procparam) memcpy(&sdk,image+procparam+16,8); /* procparam: size, magic, count, sdk_version */
         BbGpuConfig gpu={title,serial,user_dir ? user_dir : "user",(uint32_t)sdk,attributes,1920,1080};
