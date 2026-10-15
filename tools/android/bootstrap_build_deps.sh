@@ -18,7 +18,25 @@ python3 tools/android/bootstrap_release_rootfs.py
 echo '[3/5] Debian trixie ARM64 sysroot'
 python3 tools/android/fetch_arm64_sysroot.py
 
-echo '[4/5] ARM64 miniz'
+echo '[4/6] Modern Vulkan headers'
+VULKAN_HEADERS_COMMIT=8864cdc896bbc2a9b6eb36b3218fc9ef57908d77
+vulkan_headers="$src/vulkan-headers"
+if [[ ! -d $vulkan_headers/.git ]]; then
+    git init -q "$vulkan_headers"
+    git -C "$vulkan_headers" remote add origin https://github.com/KhronosGroup/Vulkan-Headers.git
+fi
+git -C "$vulkan_headers" fetch -q --depth 1 origin "$VULKAN_HEADERS_COMMIT"
+git -C "$vulkan_headers" checkout -q --force FETCH_HEAD
+git -C "$vulkan_headers" clean -qfdx
+rm -rf "$prefix/include/vulkan"
+mkdir -p "$prefix/include"
+cp -a "$vulkan_headers/include/vulkan" "$prefix/include/"
+grep -q 'VK_VALVE_shader_mixed_float_dot_product' "$prefix/include/vulkan/vulkan_core.h" ||
+    { echo 'Pinned Vulkan headers lack VK_VALVE_shader_mixed_float_dot_product' >&2; exit 1; }
+grep -q 'VK_EXT_shader_float8' "$prefix/include/vulkan/vulkan_core.h" ||
+    { echo 'Pinned Vulkan headers lack VK_EXT_shader_float8' >&2; exit 1; }
+
+echo '[5/6] ARM64 miniz'
 MINIZ_COMMIT=77d0dce8627735138c51770d1799a1ef48f2117d
 miniz="$src/miniz"
 if [[ ! -d $miniz/.git ]]; then
@@ -40,7 +58,7 @@ ninja -C "$deps/miniz-build" install >> "$deps/miniz-build.log" 2>&1 ||
 [[ -f $prefix/lib/libminiz.a && -f $prefix/lib/cmake/miniz/minizConfig.cmake ]] ||
     { echo 'miniz install is incomplete' >&2; exit 1; }
 
-echo '[5/5] Pinned ps4-pkg-tools source'
+echo '[6/6] Pinned ps4-pkg-tools source'
 PKG_COMMIT=45baedaa29b8da42b3c6fe912800d2fa4119834b
 pkg="$PWD/.local-deps/src/ps4-pkg-tools"
 if [[ ! -d $pkg/.git ]]; then
@@ -58,7 +76,7 @@ Android build dependencies are ready.
 
 Rootfs:       .local-deps/android/migration/x/rootfs
 ARM64 sysroot:.local-deps/android/arm64-sysroot
-miniz prefix: .local-deps/android/arm64-prefix
+header prefix:.local-deps/android/arm64-prefix (Vulkan-Headers 1.4.350.1 + miniz)
 pkg source:   .local-deps/src/ps4-pkg-tools
 device libs:  .local-deps/android/device-libs.txt
 bridge APK:   .local-deps/android/upstream/Bloodborne-0.8.4.apk
