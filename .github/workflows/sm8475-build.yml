@@ -1,0 +1,84 @@
+name: SM8475 integration build
+
+on:
+  push:
+    branches:
+      - feature/edge30-ultra-sm8475
+    paths:
+      - "tools/android/**"
+      - "cpu/**"
+      - "gpu/**"
+      - "src/**"
+      - "third_party/**"
+      - ".gitmodules"
+      - ".github/workflows/sm8475-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      BB_ANDROID_SDK: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      BB_RELEASE_GPU_FAMILY: sm8475
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install host build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang lld llvm cmake ninja-build pkg-config patchelf patch \
+            python3 python3-venv python3-pip git curl unzip zip ca-certificates
+          python3 -m pip install --break-system-packages Pillow
+
+      - name: Install Android SDK components
+        run: |
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Recreate pinned build inputs
+        run: bash tools/android/bootstrap_build_deps.sh
+
+      - name: Build Turnip for Adreno 6xx/7xx
+        run: bash tools/android/build_turnip.sh main
+
+      - name: Build native ARM64 runtime and FEXCore
+        run: bash tools/android/build_arm64.sh
+
+      - name: Build Lossless Scaling Vulkan layer
+        run: bash tools/android/build_lsfg.sh
+
+      - name: Build PS4 PKG helper
+        run: bash tools/android/build_pkg_tool.sh arm64
+
+      - name: Stage native bundle
+        run: |
+          python3 tools/android/build_arm64_bundle.py \
+            --device-libs .local-deps/android/device-libs.txt
+
+      - name: Build SM8475 APK
+        run: |
+          BB_RELEASE_GPU_FAMILY=sm8475 bash tools/android/build_release_apk.sh
+
+      - name: Verify APK contains no game executable
+        run: |
+          apk="$(ls out/release/Bloodborne-*.apk | head -n1)"
+          unzip -l "$apk" > /tmp/apk-list.txt
+          ! grep -Ei '(^|/)(eboot\.bin|boot-linked\.bin|Lossless\.dll)$' /tmp/apk-list.txt
+          sha256sum "$apk"
+          ls -lh "$apk"
+
+      - name: Upload test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bloodborne-SM8475-test
+          path: |
+            out/release/Bloodborne-*.apk
+            out/release/Bloodborne-*.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
