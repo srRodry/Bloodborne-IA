@@ -43,6 +43,14 @@ else
 fi
 export VK_DRIVER_FILES="$icd"
 export VK_ICD_FILENAMES="$VK_DRIVER_FILES"
+# Optional KGSL constraint for diagnosing governor under-clocking. "max" is intentionally not
+# the default on phones: higher instantaneous clocks can turn into worse sustained performance
+# once the thermal governor reacts. Custom drivers that lack the local Turnip patch ignore it.
+gpu_power=$(setting gpu_power)
+case $gpu_power in
+    max) export TU_KGSL_PWR_CONSTRAINT=max; echo "GPU power constraint: max" ;;
+    *) unset TU_KGSL_PWR_CONSTRAINT 2>/dev/null || true; gpu_power=auto; echo "GPU power constraint: automatic" ;;
+esac
 if [ "${BB_ANDROID_INPUT:-0}" = 1 ]; then
     export BB_PAD_FILE="$base/android-pad.state" BB_PAD_QUIET=1
     # Text the game asks for (the character name): the app's touch keyboard.
