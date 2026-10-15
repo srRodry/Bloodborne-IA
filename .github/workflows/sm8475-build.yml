@@ -14,6 +14,10 @@ on:
       - ".github/workflows/sm8475-build.yml"
   workflow_dispatch:
 
+concurrency:
+  group: sm8475-integration-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-24.04
