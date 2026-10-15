@@ -83,11 +83,11 @@ void runtime_file_dump_recent_problems(void) {
     const unsigned count=next<FILE_PROBLEM_SLOTS ? next : FILE_PROBLEM_SLOTS;
     if (!count) return;
     static const char head[]="Recent game-file I/O problems (newest first):\n";
-    (void)write(2,head,sizeof(head)-1);
+    { ssize_t written=write(2,head,sizeof(head)-1); (void)written; }
     for (unsigned i=0;i<count;++i) {
         const unsigned slot=(next-1-i)%FILE_PROBLEM_SLOTS;
         const char *line=file_problems[slot];
-        if (line[0]) (void)write(2,line,strnlen(line,FILE_PROBLEM_LEN));
+        if (line[0]) { ssize_t written=write(2,line,strnlen(line,FILE_PROBLEM_LEN)); (void)written; }
     }
 }
 
