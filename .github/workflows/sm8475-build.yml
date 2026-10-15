@@ -46,14 +46,86 @@ jobs:
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Restore dependency cache
+        id: deps-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .local-deps/android/upstream
+            .local-deps/android/arm64-debs
+            .local-deps/android/arm64-sysroot
+            .local-deps/android/arm64-prefix
+            .local-deps/android/mesa-sysroot
+            .local-deps/android/mesa-venv
+            .local-deps/android/src
+            .local-deps/src
+          key: sm8475-deps-v1-${{ runner.os }}-${{ hashFiles('tools/android/bootstrap_build_deps.sh', 'tools/android/bootstrap_release_rootfs.py', 'tools/android/fetch_arm64_sysroot.py', 'tools/android/build_turnip.sh') }}
+
       - name: Recreate pinned build inputs
         run: bash tools/android/bootstrap_build_deps.sh
 
+      - name: Save dependency cache
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .local-deps/android/upstream
+            .local-deps/android/arm64-debs
+            .local-deps/android/arm64-sysroot
+            .local-deps/android/arm64-prefix
+            .local-deps/android/mesa-sysroot
+            .local-deps/android/mesa-venv
+            .local-deps/android/src
+            .local-deps/src
+          key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+
+      - name: Restore Turnip cache
+        id: turnip-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: out/arm64/turnip
+          key: sm8475-turnip-v1-${{ runner.os }}-${{ hashFiles('tools/android/build_turnip.sh', 'tools/android/mesa-patches/**/*.patch') }}
+
       - name: Build Turnip for Adreno 6xx/7xx
+        if: steps.turnip-cache.outputs.cache-hit != 'true'
         run: bash tools/android/build_turnip.sh main
 
+      - name: Save Turnip cache
+        if: steps.turnip-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: out/arm64/turnip
+          key: ${{ steps.turnip-cache.outputs.cache-primary-key }}
+
+      - name: Restore native ARM64 cache
+        id: native-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            out/arm64/fex
+            out/arm64/gpu
+            out/arm64/atrac9
+            out/arm64/libatrac9.a
+            out/arm64/bb-probe
+            out/arm64/kgsl-chip-id
+          key: sm8475-native-v1-${{ runner.os }}-${{ hashFiles('cpu/**', 'gpu/**', 'src/**', 'third_party/FEX/**', 'third_party/LibAtrac9/**', 'tools/android/build_arm64.sh', 'tools/android/aarch64-toolchain.cmake', 'tools/android/bootstrap_build_deps.sh') }}
+
       - name: Build native ARM64 runtime and FEXCore
+        if: steps.native-cache.outputs.cache-hit != 'true'
         run: bash tools/android/build_arm64.sh
+
+      - name: Save native ARM64 cache
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            out/arm64/fex
+            out/arm64/gpu
+            out/arm64/atrac9
+            out/arm64/libatrac9.a
+            out/arm64/bb-probe
+            out/arm64/kgsl-chip-id
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
 
       - name: Build Lossless Scaling Vulkan layer
         run: bash tools/android/build_lsfg.sh
