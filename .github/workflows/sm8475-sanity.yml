@@ -7,6 +7,7 @@ on:
   pull_request:
     paths:
       - "tools/android/**"
+      - "src/probe.c"
       - ".github/workflows/sm8475-sanity.yml"
 
 jobs:
