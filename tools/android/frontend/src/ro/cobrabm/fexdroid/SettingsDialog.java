@@ -64,6 +64,8 @@ final class SettingsDialog {
     private static final String[] LSFG_FLOW_NAMES={"1.0 (best quality)","0.75","0.5 (fastest)"};
     private static final String[] FPS_VALUES={"30","40","45","60","0"};
     private static final String[] FPS_NAMES={"30 (the game's own)","40","45","60","Unlimited"};
+    private static final String[] GPU_POWER_VALUES={"auto","max"};
+    private static final String[] GPU_POWER_NAMES={"Automatic governor","Maximum KGSL constraint (diagnostic)"};
     private static final String[] FEX_PROFILE_VALUES={"fast","balanced","stable"};
     private static final String[] FEX_PROFILE_NAMES={
         "Fast · TSO off (maximum CPU speed)",
@@ -250,6 +252,14 @@ final class SettingsDialog {
         fpsNote.setText("Above 30 uses the community frame-rate patch (game timing follows the real frame time).");
         box.addView(fpsNote);
 
+        heading(box,"GPU power policy");
+        final RadioGroup gpuPower=choices(box,GPU_POWER_NAMES,
+            indexOf(GPU_POWER_VALUES,get("gpu_power","auto"),0));
+        TextView gpuPowerNote=new TextView(activity); gpuPowerNote.setTextSize(13); gpuPowerNote.setAlpha(0.7f);
+        gpuPowerNote.setText("Automatic is recommended for sustained play. Maximum is only a diagnostic "
+            +"for GPU governor under-clocking and may throttle sooner as the phone heats up.");
+        box.addView(gpuPowerNote);
+
         heading(box,"CPU translation profile");
         final RadioGroup fexProfiles=choices(box,FEX_PROFILE_NAMES,
             indexOf(FEX_PROFILE_VALUES,get("fex_profile","balanced"),1));
@@ -286,6 +296,7 @@ final class SettingsDialog {
                 Map<String,String> changed=new LinkedHashMap<>();
                 changed.put("upscaler",UPSCALER_VALUES[Math.max(0,checkedIndex(upscalers))]);
                 changed.put("fps_limit",FPS_VALUES[Math.max(0,checkedIndex(fpsLimit))]);
+                changed.put("gpu_power",GPU_POWER_VALUES[Math.max(0,checkedIndex(gpuPower))]);
                 changed.put("frame_generation",frameGen.isChecked() && checkedIndex(upscalers)!=0 ? "1" : "0");
                 changed.put("fex_profile",FEX_PROFILE_VALUES[Math.max(0,checkedIndex(fexProfiles))]);
                 changed.put("thor_cpus",cpuList(cores));
