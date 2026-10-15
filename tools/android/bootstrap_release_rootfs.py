@@ -2,8 +2,9 @@
 """Recreate the Android build rootfs from a pinned public Bloodborne Android release.
 
 This downloads only the upstream APK, verifies its GitHub-published SHA-256, verifies the
-embedded runtime.payload against assets/runtime.sha256, and extracts only rootfs/. No game
-files are present in that release or extracted by this script.
+embedded runtime.payload against assets/runtime.sha256, and extracts the rootfs plus the
+game-free precompiled patch-parts shipped by that pinned runtime. No game executable or game
+content is present in that release or extracted by this script.
 
 The APK is retained locally as a reproducible source for the MIT display/input bridge
 libraries used by build_frontend.sh.
@@ -30,6 +31,7 @@ CACHE = ROOT / ".local-deps/android/upstream"
 APK = CACHE / f"Bloodborne-{VERSION}.apk"
 MIGRATION = ROOT / ".local-deps/android/migration/x"
 ROOTFS = MIGRATION / "rootfs"
+PATCH_PARTS = MIGRATION / "bbport/arm64/patch-parts"
 DEVICE_LIBS = ROOT / ".local-deps/android/device-libs.txt"
 PROVENANCE = ROOT / ".local-deps/android/upstream-runtime.json"
 
@@ -59,9 +61,12 @@ def download() -> None:
 
 
 def safe_runtime_members(tar: tarfile.TarFile):
+    """Select only reproducible, game-free inputs needed by our Android build."""
     for member in tar.getmembers():
         name = member.name.lstrip("./")
-        if name == "rootfs" or name.startswith("rootfs/"):
+        if (name == "rootfs" or name.startswith("rootfs/") or
+                name == "bbport/arm64/patch-parts" or
+                name.startswith("bbport/arm64/patch-parts/")):
             yield member
 
 
@@ -119,6 +124,8 @@ def main() -> None:
     missing = [str(p.relative_to(ROOT)) for p in required_rootfs if not p.exists()]
     if missing:
         raise SystemExit(f"Extracted rootfs is incomplete: {missing}")
+    if not PATCH_PARTS.is_dir() or not any(PATCH_PARTS.glob("*.bin")):
+        raise SystemExit("Pinned runtime contains no precompiled patch-parts")
 
     libs = set()
     for directory in (ROOTFS / "usr/lib/aarch64-linux-gnu", ROOTFS / "usr/lib"):
@@ -137,11 +144,13 @@ def main() -> None:
         "apkSha256": APK_SHA256,
         "runtimeSha256": expected_runtime,
         "rootfs": str(ROOTFS.relative_to(ROOT)),
+        "patchParts": str(PATCH_PARTS.relative_to(ROOT)),
         "deviceLibs": str(DEVICE_LIBS.relative_to(ROOT)),
         "bridgeApk": str(APK.relative_to(ROOT)),
     }
     PROVENANCE.write_text(json.dumps(provenance, indent=2) + "\n")
     print(f"Rootfs: {ROOTFS}")
+    print(f"Patch parts: {PATCH_PARTS}")
     print(f"Device libraries: {DEVICE_LIBS} ({len(libs)} names)")
     print(f"Bridge APK: {APK}")
     print(f"Runtime SHA-256: {expected_runtime}")
