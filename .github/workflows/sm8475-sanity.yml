@@ -1,0 +1,58 @@
+name: SM8475 sanity
+
+on:
+  push:
+    branches:
+      - feature/edge30-ultra-sm8475
+  pull_request:
+    paths:
+      - "tools/android/**"
+      - ".github/workflows/sm8475-sanity.yml"
+
+jobs:
+  sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Android launcher shell
+        run: |
+          dash -n tools/android/run-thor.sh
+          bash -n tools/android/build_arm64.sh
+          bash -n tools/android/build_release_apk.sh
+
+      - name: Validate Python build scripts
+        run: |
+          python3 -m py_compile tools/android/build_release_runtime.py
+
+      - name: Validate FEX profiles
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          profiles = {
+              "fast": Path("tools/android/fex-compatible.json"),
+              "balanced": Path("tools/android/fex-balanced.json"),
+              "stable": Path("tools/android/fex-stable.json"),
+          }
+          required = {
+              "TSOEnabled", "VectorTSOEnabled", "MemcpySetTSOEnabled",
+              "HalfBarrierTSOEnabled", "X87ReducedPrecision", "Multiblock",
+              "DisableL2Cache", "DynamicL1Cache", "DiskCache",
+          }
+          for name, path in profiles.items():
+              config = json.loads(path.read_text())["Config"]
+              missing = required - config.keys()
+              assert not missing, f"{name}: missing {sorted(missing)}"
+          assert json.loads(profiles["fast"].read_text())["Config"]["TSOEnabled"] == "0"
+          assert json.loads(profiles["balanced"].read_text())["Config"]["TSOEnabled"] == "1"
+          assert json.loads(profiles["stable"].read_text())["Config"]["X87ReducedPrecision"] == "0"
+          PY
+
+      - name: Check device-aware settings wiring
+        run: |
+          grep -q 'fex_profile=balanced' tools/android/thor.ini
+          grep -q 'gpu_power=auto' tools/android/thor.ini
+          grep -q 'FEX_PROFILE_VALUES' tools/android/frontend/src/ro/cobrabm/fexdroid/SettingsDialog.java
+          grep -q 'cpuMaxFreqKHz' tools/android/frontend/src/ro/cobrabm/fexdroid/SettingsDialog.java
