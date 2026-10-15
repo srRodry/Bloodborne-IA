@@ -149,6 +149,8 @@ def main():
             ('tools/android/run-thor.sh', 'run-thor.sh'),
             ('tools/android/mods.sh', 'mods.sh'),
             ('tools/android/fex-compatible.json', 'fex-compatible.json'),
+            ('tools/android/fex-balanced.json', 'fex-balanced.json'),
+            ('tools/android/fex-stable.json', 'fex-stable.json'),
             ('tools/android/thor-gamecontrollerdb.txt', 'thor-gamecontrollerdb.txt'),
             ('tools/android/thor.ini', 'bbport.default.ini'),
         ):
