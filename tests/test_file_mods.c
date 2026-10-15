@@ -54,7 +54,7 @@ int main(void) {
     int save=(int)do_open("/data/test-save",0x202,0644); assert(save>=3);
     assert(do_write(save,"save",4)==4 && !do_close(save));
     assert(!path_op("/data/test-save",2,0));
-    assert(!unlink(link) && !unlink(source) && !rmdir(game));
+    assert(!unlink(link) && !unlink(source) && !unlink(empty) && !rmdir(game));
     const char *dirs[]={"temp0","download0","data"};
     for (int i=0;i<3;++i) { char p[1024]; snprintf(p,sizeof(p),"%s/%s",user,dirs[i]); assert(!rmdir(p)); }
     assert(!rmdir(user) && !rmdir(root));
