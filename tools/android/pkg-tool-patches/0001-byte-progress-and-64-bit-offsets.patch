@@ -7,7 +7,7 @@ and refusal of file names that could leave the output folder.
 @@ -2,10 +2,40 @@
  // SPDX-License-Identifier: GPL-2.0-or-later
  
- #include </usr/include/zlib.h>
+ #include "zlib/zlib.h"
 +#include <cstdio>
  #include "common/io_file.h"
  #include "core/file_format/pkg.h"
