@@ -217,30 +217,14 @@ jobs:
           grep -q 'assets/runtime.sha256' /tmp/apk-list.txt
           grep -q 'lib/arm64-v8a/libfxdisplay.so' /tmp/apk-list.txt
           grep -q 'lib/arm64-v8a/libfxio.so' /tmp/apk-list.txt
-          ! grep -Ei '(^|/)(eboot\.bin|boot-linked\.bin|eboot\.elf|Lossless\.dll)
-
-      - name: Upload test APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Bloodborne-SM8475-test
-          path: |
-            out/release/Bloodborne-*.apk
-            out/release/Bloodborne-*.apk.sha256
-          if-no-files-found: error
-          retention-days: 7
- /tmp/apk-list.txt
-          ! tar -tzf out/release/runtime.tar.gz | grep -Ei '(^|/)(eboot\.bin|boot-linked\.bin|eboot\.elf|Lossless\.dll)
-
-      - name: Upload test APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Bloodborne-SM8475-test
-          path: |
-            out/release/Bloodborne-*.apk
-            out/release/Bloodborne-*.apk.sha256
-          if-no-files-found: error
-          retention-days: 7
-
+          if grep -Ei '(^|/)(eboot\.bin|boot-linked\.bin|eboot\.elf|Lossless\.dll)$' /tmp/apk-list.txt; then
+            echo 'APK contains a forbidden game-derived file' >&2
+            exit 1
+          fi
+          if tar -tzf out/release/runtime.tar.gz | grep -Ei '(^|/)(eboot\.bin|boot-linked\.bin|eboot\.elf|Lossless\.dll)$'; then
+            echo 'runtime archive contains a forbidden game-derived file' >&2
+            exit 1
+          fi
           unzip -p "$apk" assets/runtime.sha256 > /tmp/apk-runtime.sha256
           cmp -s /tmp/apk-runtime.sha256 out/release/runtime.sha256
           sha256sum "$apk"
