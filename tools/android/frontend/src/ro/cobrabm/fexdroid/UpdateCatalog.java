@@ -17,9 +17,9 @@ import org.json.JSONObject;
  *  find either). Only an APK of the repository's own releases is offered: Bloodborne-<version>.apk, from
  *  a release that is neither a draft nor a pre-release. */
 final class UpdateCatalog {
-    private static final String API="https://api.github.com/repos/ducvd89/Bloodborne-Android/releases?per_page=50";
+    private static final String API="https://api.github.com/repos/srRodry/Bloodborne-IA/releases?per_page=50";
     /** Only assets of this repository's releases are downloaded, whatever the list says. */
-    static final String DOWNLOADS="https://github.com/ducvd89/Bloodborne-Android/releases/download/";
+    static final String DOWNLOADS="https://github.com/srRodry/Bloodborne-IA/releases/download/";
     private static final Pattern TAG=Pattern.compile("android-(\\d{1,9}(?:\\.\\d{1,9})*)");
     private static final Pattern VERSION=Pattern.compile("^\\d{1,9}(?:\\.\\d{1,9})*");
     private static final int NOTES=4000;
