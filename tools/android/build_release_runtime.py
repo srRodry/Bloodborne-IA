@@ -22,6 +22,8 @@ PKG_TOOL = ROOT / 'out/arm64/pkg-tool/ps4-pkg-tool'  # build_pkg_tool.sh (the bu
 PKG_TOOL_NOTICE = ROOT / 'tools/android/ps4-pkg-tool.NOTICE'
 TURNIP = ROOT / 'out/arm64/turnip'
 TURNIP_GEN8 = ROOT / 'out/arm64/turnip-gen8'
+GPU_FAMILY = os.environ.get('BB_RELEASE_GPU_FAMILY', 'universal').strip().lower()
+SHIP_GEN8 = GPU_FAMILY not in ('adreno7xx', 'a7xx', 'sm8475')
 LSFG = ROOT / 'out/arm64/lsfg'  # build_lsfg.sh: the lsfg-vk 1.0 layer with our Turnip patches
 # The rootfs's Turnip, replaced by TURNIP's (rootfs-relative path: file there).
 TURNIP_FILES = {
@@ -106,7 +108,7 @@ def main():
         raise SystemExit('Build the PKG tool first: tools/android/build_pkg_tool.sh arm64')
     if not all((TURNIP / name).is_file() for name in TURNIP_FILES.values()):
         raise SystemExit('Build Turnip first: tools/android/build_turnip.sh')
-    if not all((TURNIP_GEN8 / name).is_file() for name in TURNIP_GEN8_FILES.values()):
+    if SHIP_GEN8 and not all((TURNIP_GEN8 / name).is_file() for name in TURNIP_GEN8_FILES.values()):
         raise SystemExit('Build the Adreno 8xx Turnip first: tools/android/build_turnip.sh gen8')
     if not (LSFG / 'liblsfg-vk.so').is_file():
         raise SystemExit('Build the Lossless Scaling layer first: tools/android/build_lsfg.sh')
@@ -126,8 +128,9 @@ def main():
             tar.add(child, arcname='rootfs/' + child.name, filter=scrub)
         for relative, name in TURNIP_FILES.items():
             tar.add(TURNIP / name, arcname='rootfs/' + relative, filter=owned_by_root)
-        for relative, name in TURNIP_GEN8_FILES.items():
-            tar.add(TURNIP_GEN8 / name, arcname='rootfs/' + relative, filter=owned_by_root)
+        if SHIP_GEN8:
+            for relative, name in TURNIP_GEN8_FILES.items():
+                tar.add(TURNIP_GEN8 / name, arcname='rootfs/' + relative, filter=owned_by_root)
         for name, mode in (('rootfs/tmp', 0o1777), ('rootfs/tmp/.X11-unix', 0o1777),
                            ('rootfs/run', 0o755), ('rootfs/home', 0o755),
                            ('rootfs/var', 0o755),
@@ -169,7 +172,7 @@ def main():
     if any(any(word in name for word in banned) for name in names):
         archive.unlink()
         raise SystemExit('Refusing to package a game-derived file')
-    print(f'Runtime: {archive} ({archive.stat().st_size:,} bytes), sha256 {digest}')
+    print(f'Runtime: {archive} ({archive.stat().st_size:,} bytes), sha256 {digest}, GPU family {GPU_FAMILY}')
 
 
 if __name__ == '__main__':
