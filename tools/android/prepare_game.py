@@ -14,16 +14,28 @@ if not (here / 'prepare.py').is_file():
     sys.path.insert(0, str(here.parents[1] / 'scripts'))
 
 import content_profile
+import game_check
 import link_modules
 import prepare
 
+CHECK_REVISION = 2
+
 
 def signature(game):
-    result = {'path': str(game.resolve())}
+    # CHECK_REVISION invalidates an older prepared image when validation semantics change.
+    # The 1.09 world-layout marker is tracked too: replacing a stale base-game file with the
+    # update's version must cause the game check to run again on the next launch.
+    result = {'check_revision': CHECK_REVISION, 'path': str(game.resolve())}
     for name in ('eboot.bin', 'sce_module/libc.prx', 'sce_module/libSceFios2.prx',
                  'sce_sys/param.sfo'):
         st = (game / name).stat()
         result[name] = [st.st_size, st.st_mtime_ns]
+    layout = game / game_check.CHECKED_LAYOUT
+    if layout.is_file():
+        st = layout.stat()
+        result[game_check.CHECKED_LAYOUT] = [st.st_size, st.st_mtime_ns]
+    else:
+        result[game_check.CHECKED_LAYOUT] = None
     return result
 
 
