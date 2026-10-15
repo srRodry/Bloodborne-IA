@@ -64,10 +64,12 @@ final class SettingsDialog {
     private static final String[] LSFG_FLOW_NAMES={"1.0 (best quality)","0.75","0.5 (fastest)"};
     private static final String[] FPS_VALUES={"30","40","45","60","0"};
     private static final String[] FPS_NAMES={"30 (the game's own)","40","45","60","Unlimited"};
-    /** Snapdragon 8 Gen 2: three Cortex-A510, four Cortex-A715, one Cortex-X3. */
-    private static final String[] CORE_NAMES={"Core 0 · efficiency A510 2.0 GHz","Core 1 · efficiency A510 2.0 GHz",
-        "Core 2 · efficiency A510 2.0 GHz","Core 3 · performance A715 2.8 GHz","Core 4 · performance A715 2.8 GHz",
-        "Core 5 · performance A715 2.8 GHz","Core 6 · performance A715 2.8 GHz","Core 7 · prime X3 3.2 GHz"};
+    private static final String[] FEX_PROFILE_VALUES={"fast","balanced","stable"};
+    private static final String[] FEX_PROFILE_NAMES={
+        "Fast · TSO off (maximum CPU speed)",
+        "Balanced · TSO on + reduced x87",
+        "Stable · strict TSO + full x87 precision"
+    };
     private static final String[] LOD_VALUES={"-2","0","1","2"};
     private static final String[] LOD_NAMES={"Highest","Game default","Lower","Lowest"};
 
@@ -142,6 +144,32 @@ final class SettingsDialog {
     private static int indexOf(String[] values,String value,int fallback) {
         for (int i=0;i<values.length;++i) if (values[i].equals(value)) return i;
         return fallback;
+    }
+    /** Android exposes per-core maximum frequencies through sysfs on supported devices. Labels are
+     *  derived at runtime instead of pretending every phone has the AYN Thor's Snapdragon 8 Gen 2. */
+    private static long cpuMaxFreqKHz(int cpu) {
+        String root="/sys/devices/system/cpu/cpu"+cpu+"/cpufreq/";
+        for (String name:new String[]{"cpuinfo_max_freq","scaling_max_freq"}) {
+            File f=new File(root,name);
+            if (!f.isFile()) continue;
+            try (BufferedReader r=new BufferedReader(new InputStreamReader(new FileInputStream(f),"UTF-8"))) {
+                return Long.parseLong(r.readLine().trim());
+            } catch (Exception ignored) {}
+        }
+        return 0;
+    }
+    private static String[] coreNames() {
+        int count=Math.max(1,Runtime.getRuntime().availableProcessors());
+        String[] names=new String[count];
+        long[] freq=new long[count]; long fastest=0;
+        for (int i=0;i<count;++i) { freq[i]=cpuMaxFreqKHz(i); fastest=Math.max(fastest,freq[i]); }
+        for (int i=0;i<count;++i) {
+            if (freq[i]<=0 || fastest<=0) { names[i]="Core "+i; continue; }
+            double ratio=(double)freq[i]/fastest;
+            String tier=ratio>=0.93 ? "prime" : ratio>=0.75 ? "performance" : "efficiency";
+            names[i]="Core "+i+" · "+tier+" · "+String.format(Locale.ROOT,"%.2f GHz",freq[i]/1000000.0);
+        }
+        return names;
     }
     /** A taskset list ("0-2,5", "3-7"); empty: every core. */
     private static boolean[] parseCpus(String list,int count) {
@@ -222,10 +250,19 @@ final class SettingsDialog {
         fpsNote.setText("Above 30 uses the community frame-rate patch (game timing follows the real frame time).");
         box.addView(fpsNote);
 
+        heading(box,"CPU translation profile");
+        final RadioGroup fexProfiles=choices(box,FEX_PROFILE_NAMES,
+            indexOf(FEX_PROFILE_VALUES,get("fex_profile","balanced"),1));
+        TextView fexNote=new TextView(activity); fexNote.setTextSize(13); fexNote.setAlpha(0.7f);
+        fexNote.setText("Balanced is the stabilization baseline. Fast disables x86 TSO memory ordering; "
+            +"Stable uses the strictest ordering and floating-point precision, at a higher CPU cost.");
+        box.addView(fexNote);
+
         heading(box,"CPU cores the game may use");
-        final Switch[] cores=new Switch[CORE_NAMES.length];
-        boolean[] allowed=parseCpus(get("thor_cpus",""),CORE_NAMES.length);
-        for (int i=0;i<cores.length;++i) cores[i]=toggle(box,CORE_NAMES[i],allowed[i]);
+        final String[] coreNames=coreNames();
+        final Switch[] cores=new Switch[coreNames.length];
+        boolean[] allowed=parseCpus(get("thor_cpus",""),coreNames.length);
+        for (int i=0;i<cores.length;++i) cores[i]=toggle(box,coreNames[i],allowed[i]);
         CompoundButton.OnCheckedChangeListener keepOne=(b,on) -> {
             if (on) return;
             for (Switch c:cores) if (c.isChecked()) return;
@@ -250,6 +287,7 @@ final class SettingsDialog {
                 changed.put("upscaler",UPSCALER_VALUES[Math.max(0,checkedIndex(upscalers))]);
                 changed.put("fps_limit",FPS_VALUES[Math.max(0,checkedIndex(fpsLimit))]);
                 changed.put("frame_generation",frameGen.isChecked() && checkedIndex(upscalers)!=0 ? "1" : "0");
+                changed.put("fex_profile",FEX_PROFILE_VALUES[Math.max(0,checkedIndex(fexProfiles))]);
                 changed.put("thor_cpus",cpuList(cores));
                 changed.put("preset",String.valueOf(Math.max(0,checkedIndex(presets))));
                 changed.put("sharpen",sharpen.isChecked() ? "1" : "0");
