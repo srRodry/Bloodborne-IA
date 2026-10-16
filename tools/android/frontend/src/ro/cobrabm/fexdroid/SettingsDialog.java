@@ -66,6 +66,12 @@ final class SettingsDialog {
     private static final String[] FPS_NAMES={"30 (the game's own)","40","45","60","Unlimited"};
     private static final String[] GPU_POWER_VALUES={"auto","max"};
     private static final String[] GPU_POWER_NAMES={"Automatic governor","Maximum KGSL constraint (diagnostic)"};
+    private static final String[] RENDERER_SYNC_VALUES={"normal","buffer-safe","strict"};
+    private static final String[] RENDERER_SYNC_NAMES={
+        "Normal · maximum throughput",
+        "Buffer safe · synchronous vertex/index source copies",
+        "Strict · serialize renderer for diagnosis"
+    };
     private static final String[] FEX_PROFILE_VALUES={"fast","balanced","stable"};
     private static final String[] FEX_PROFILE_NAMES={
         "Fast · TSO off (maximum CPU speed)",
@@ -260,6 +266,14 @@ final class SettingsDialog {
             +"for GPU governor under-clocking and may throttle sooner as the phone heats up.");
         box.addView(gpuPowerNote);
 
+        heading(box,"Renderer synchronization");
+        final RadioGroup rendererSync=choices(box,RENDERER_SYNC_NAMES,
+            indexOf(RENDERER_SYNC_VALUES,get("renderer_sync","normal"),0));
+        TextView rendererSyncNote=new TextView(activity); rendererSyncNote.setTextSize(13); rendererSyncNote.setAlpha(0.7f);
+        rendererSyncNote.setText("Use Buffer safe first when geometry stretches or explodes. Strict is a "
+            +"diagnostic fallback and may reduce FPS substantially. Change one level at a time.");
+        box.addView(rendererSyncNote);
+
         heading(box,"CPU translation profile");
         final RadioGroup fexProfiles=choices(box,FEX_PROFILE_NAMES,
             indexOf(FEX_PROFILE_VALUES,get("fex_profile","balanced"),1));
@@ -297,6 +311,7 @@ final class SettingsDialog {
                 changed.put("upscaler",UPSCALER_VALUES[Math.max(0,checkedIndex(upscalers))]);
                 changed.put("fps_limit",FPS_VALUES[Math.max(0,checkedIndex(fpsLimit))]);
                 changed.put("gpu_power",GPU_POWER_VALUES[Math.max(0,checkedIndex(gpuPower))]);
+                changed.put("renderer_sync",RENDERER_SYNC_VALUES[Math.max(0,checkedIndex(rendererSync))]);
                 changed.put("frame_generation",frameGen.isChecked() && checkedIndex(upscalers)!=0 ? "1" : "0");
                 changed.put("fex_profile",FEX_PROFILE_VALUES[Math.max(0,checkedIndex(fexProfiles))]);
                 changed.put("thor_cpus",cpuList(cores));

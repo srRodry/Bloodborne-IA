@@ -96,6 +96,33 @@ export BB_INDIRECT_GUARD=${BB_INDIRECT_GUARD:-0}
 # use, so thor_cpus=3-7 turned it off. On, it frees the GPU command thread: 31 -> 34 FPS on the
 # Thor with all cores. BB_DRAW_PIPE=0 in thor-local.sh turns it off.
 export BB_DRAW_PIPE=${BB_DRAW_PIPE:-1}
+# SM8475 renderer synchronization A/B. "normal" preserves the fast path. "buffer-safe"
+# disables deferred copies of small read-only buffers, forcing their guest bytes to be copied
+# synchronously before the draw can use them. This directly targets the BufferCache path that
+# documents vertex explosions when a source changes before the deferred copy runs.
+# "strict" adds a single Vulkan recorder, synchronous submit, and disables the draw pipeline.
+renderer_sync=$(setting renderer_sync)
+case $renderer_sync in
+    buffer-safe)
+        toggle_file="$base/renderer-sync.toggles"
+        printf '16384 0\n' > "$toggle_file"
+        export BB_TOGGLE_FILE="$toggle_file"
+        echo 'Renderer sync: buffer-safe (synchronous small guest buffer copies)'
+        ;;
+    strict)
+        toggle_file="$base/renderer-sync.toggles"
+        printf '16384 0\n' > "$toggle_file"
+        export BB_TOGGLE_FILE="$toggle_file"
+        export BB_DRAW_PIPE=0 BB_VK_RECORD_THREADS=1 BB_ASYNC_SUBMIT=0
+        echo 'Renderer sync: strict (buffer-safe + one recorder + sync submit + draw pipe off)'
+        ;;
+    *)
+        renderer_sync=normal
+        rm -f "$base/renderer-sync.toggles"
+        unset BB_TOGGLE_FILE 2>/dev/null || true
+        echo 'Renderer sync: normal'
+        ;;
+esac
 # Lossless Scaling frame generation (lsfg_multiplier 2-4): the lsfg-vk 1.0 layer with our Turnip
 # patches (bbport/arm64/lsfg, build_lsfg.sh) and Lossless.dll from the player's own Lossless
 # Scaling (Steam), next to the game folder or in bbport/. It replaces FSR 3.1 frame generation.
