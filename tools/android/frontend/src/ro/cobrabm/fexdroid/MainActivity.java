@@ -1076,6 +1076,25 @@ public final class MainActivity extends Activity {
         return joined.length()>300 ? joined.substring(0,300)+"…" : joined;
     }
 
+    /** Recent /app0 open/read failures captured by the native file layer before a later guest panic. */
+    private static String gameFileProblems(File file) {
+        java.util.ArrayDeque<String> problems=new java.util.ArrayDeque<>();
+        try (BufferedReader r=new BufferedReader(new java.io.FileReader(file))) {
+            for (String line; (line=r.readLine())!=null;) {
+                line=line.trim();
+                if (!line.startsWith("Runtime file problem:")) continue;
+                String problem=line.substring("Runtime file problem:".length()).trim();
+                if (problem.length()>260) problem=problem.substring(0,260)+"…";
+                if (problems.size()>=3) problems.removeFirst();
+                problems.addLast(problem);
+            }
+        } catch (Exception ignored) {}
+        if (problems.isEmpty()) return "";
+        StringBuilder out=new StringBuilder("Recent game-file I/O:");
+        for (String problem:problems) out.append("\n• ").append(problem);
+        return out.toString();
+    }
+
     /** Snapshot Android's memory state at the instant the child exits, useful to separate SIGSEGV from LMK/OOM. */
     private String memoryAtExit() {
         try {
@@ -1106,6 +1125,7 @@ public final class MainActivity extends Activity {
                         File gameLog=new File(BASE,"logs/android-game.log");
                         String detail=lastGameLogDetail(gameLog);
                         String profile=gameProfileDetail(gameLog);
+                        String fileProblems=gameFileProblems(gameLog);
                         String memory=memoryAtExit();
                         String message;
                         if (detail.startsWith("GAME CHECK FAILED:")) {
@@ -1117,9 +1137,13 @@ public final class MainActivity extends Activity {
                         if (!profile.isEmpty()) message+="\n"+profile;
                         if (!detail.isEmpty() && !detail.startsWith("GAME CHECK FAILED:"))
                             message+="\nLast runtime line: "+detail;
-                        if (detail.contains("0x20b56d2"))
-                            message+="\nKnown FileTransferTask fault: verify a clean, fully replaced 1.09 update "
-                                +"and temporarily disable loose mods.";
+                        if (!fileProblems.isEmpty()) message+="\n"+fileProblems;
+                        if (detail.contains("0x20b56d2")) {
+                            message+="\nKnown FileTransferTask fault: the game data does not match the "
+                                +"effective 1.09 layout.";
+                            if (fileProblems.isEmpty())
+                                message+=" No failed/short /app0 read was recorded immediately before the fault.";
+                        }
                         if (!memory.isEmpty()) message+="\n"+memory;
                         error(message+"\nOpen the menu to restart.");
                     }

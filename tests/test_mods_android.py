@@ -239,6 +239,47 @@ class AndroidModTests(unittest.TestCase):
         self.assertIn('Refusing', result.stderr)
         self.assertTrue((self.game / 'eboot.bin').exists())
 
+    def test_update_overlay_uses_sibling_109(self):
+        (self.game / 'sce_sys').mkdir()
+        (self.game / 'sce_sys/param.sfo').write_bytes(
+            make_sfo({'TITLE_ID': 'CUSA03173', 'APP_VER': '01.00', 'CATEGORY': 'gd'}))
+        (self.game / 'dvdroot_ps4/chr/keep.dcx').write_bytes(b'keep')
+        update = self.root / 'game-UPDATE'
+        (update / 'sce_sys').mkdir(parents=True)
+        (update / 'dvdroot_ps4/chr').mkdir(parents=True)
+        (update / 'dvdroot_ps4/msg').mkdir(parents=True)
+        (update / 'sce_sys/param.sfo').write_bytes(
+            make_sfo({'TITLE_ID': 'CUSA03173', 'APP_VER': '01.09', 'CATEGORY': 'gp'}))
+        (update / 'eboot.bin').write_bytes(b'new eboot')
+        (update / 'dvdroot_ps4/chr/a.dcx').write_bytes(b'updated')
+        (update / 'dvdroot_ps4/msg/new.fmg').write_bytes(b'new')
+        out = self.root / 'update-game'
+        result = self.run_cli('update-overlay', '--game', self.game, '--out', out)
+        effective = Path(result.stdout.strip())
+        self.assertEqual(effective, out.resolve())
+        self.assertEqual((effective / 'eboot.bin').read_bytes(), b'new eboot')
+        self.assertEqual((effective / 'dvdroot_ps4/chr/a.dcx').read_bytes(), b'updated')
+        self.assertEqual((effective / 'dvdroot_ps4/chr/keep.dcx').read_bytes(), b'keep')
+        self.assertEqual((effective / 'dvdroot_ps4/msg/new.fmg').read_bytes(), b'new')
+        self.assertEqual((self.game / 'eboot.bin').read_bytes(), b'eboot')
+        self.assertIn('Game update overlay: using', result.stderr)
+
+    def test_update_overlay_rejects_wrong_update(self):
+        (self.game / 'sce_sys').mkdir()
+        (self.game / 'sce_sys/param.sfo').write_bytes(
+            make_sfo({'TITLE_ID': 'CUSA03173', 'APP_VER': '01.00', 'CATEGORY': 'gd'}))
+        update = self.root / 'game-patch'
+        (update / 'sce_sys').mkdir(parents=True)
+        (update / 'sce_sys/param.sfo').write_bytes(
+            make_sfo({'TITLE_ID': 'CUSA03173', 'APP_VER': '01.08', 'CATEGORY': 'gp'}))
+        (update / 'eboot.bin').write_bytes(b'wrong')
+        out = self.root / 'update-game'
+        (out / 'stale').mkdir(parents=True)
+        result = self.run_cli('update-overlay', '--game', self.game, '--out', out)
+        self.assertEqual(Path(result.stdout.strip()), self.game.resolve())
+        self.assertEqual(list(out.iterdir()), [])
+        self.assertIn('version 01.08', result.stderr)
+
     def test_mods_py_still_agrees_on_selection(self):
         for name in ('A', 'B', 'C'):
             self.put(name, 'dvdroot_ps4/chr/a.dcx')

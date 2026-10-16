@@ -231,10 +231,24 @@ case ${1:-game} in
         exec "$host/usr/bin/FEX" "$base/bin/bb-probe" "$base/data/cpu-fixture.bin" --timeout 60
         ;;
     game)
-        # The game folder chosen in the app (shared storage), else the bundle's own.
-        game_dir=${BB_GAME_DIR:-$base/game}
-        [ -f "$game_dir/eboot.bin" ] || { echo "Game missing: $game_dir"; exit 2; }
+        # The game folder chosen in the app (shared storage), else the bundle's own. If a shadPS4-
+        # style 1.09 update folder sits beside it (CUSA...-UPDATE or -patch), layer every update
+        # file over the base instead of relying on a manual merge that can leave stale files.
+        selected_game_dir=${BB_GAME_DIR:-$base/game}
+        game_dir=$selected_game_dir
+        [ -f "$selected_game_dir/eboot.bin" ] || { echo "Game missing: $selected_game_dir"; exit 2; }
         if [ -x "$host/usr/bin/python3.13" ]; then
+            update_game=$(PYTHONHOME="$host/usr" "$host/usr/bin/python3.13" \
+                "$base/scripts/mods_android.py" update-overlay --game "$selected_game_dir" \
+                --out "$base/update-game" | tail -n 1) || update_game=
+            if [ -n "$update_game" ] && [ -f "$update_game/eboot.bin" ]; then
+                game_dir=$update_game
+            else
+                echo 'Game update overlay: unusable result; using selected folder'
+                game_dir=$selected_game_dir
+                rm -rf "$base/update-game"
+            fi
+            export BB_EFFECTIVE_GAME_DIR="$game_dir"
             PYTHONHOME="$host/usr" "$host/usr/bin/python3.13" \
                 "$base/scripts/prepare_game.py" "$game_dir" "$base/data"
         elif [ ! -f "$base/data/boot-linked.bin" ]; then

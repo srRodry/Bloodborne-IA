@@ -229,6 +229,134 @@ def clear(out, protected):
             shutil.rmtree(entry)
 
 
+
+def update_candidates(game):
+    """Sibling update folders used by shadPS4/bbhost conventions, without changing the base game."""
+    game = Path(game).resolve(strict=True)
+    seen = set()
+    out = []
+    for suffix in ('-UPDATE', '-update', '-patch', '-PATCH'):
+        candidate = game.parent / (game.name + suffix)
+        key = str(candidate).casefold()
+        if key not in seen:
+            seen.add(key)
+            out.append(candidate)
+    return out
+
+
+def find_game_update(game):
+    """A sibling Bloodborne 1.09 update folder for the selected game, or None."""
+    game = Path(game).resolve(strict=True)
+    try:
+        base = parse_sfo((game / 'sce_sys' / 'param.sfo').read_bytes())
+    except (OSError, ValueError):
+        base = {}
+    base_title = base.get('TITLE_ID')
+    for candidate in update_candidates(game):
+        if not candidate.is_dir() or candidate.is_symlink():
+            continue
+        try:
+            sfo = parse_sfo((candidate / 'sce_sys' / 'param.sfo').read_bytes())
+        except (OSError, ValueError) as error:
+            print(f'Game update overlay: ignoring {candidate.name}: unreadable param.sfo ({error})',
+                  file=sys.stderr)
+            continue
+        title, version, category = sfo.get('TITLE_ID'), sfo.get('APP_VER'), sfo.get('CATEGORY')
+        if base_title and title != base_title:
+            print(f'Game update overlay: ignoring {candidate.name}: TITLE_ID {title or "?"} != {base_title}',
+                  file=sys.stderr)
+            continue
+        if version != MOD_VERSION or category not in (None, 'gp'):
+            print(f'Game update overlay: ignoring {candidate.name}: version {version or "?"}, '
+                  f'category {category or "?"}', file=sys.stderr)
+            continue
+        if not (candidate / 'eboot.bin').is_file():
+            print(f'Game update overlay: ignoring {candidate.name}: eboot.bin missing', file=sys.stderr)
+            continue
+        return candidate
+    return None
+
+
+def materialize_overlay_directory(directory):
+    """Turn a directory symlink into a shallow directory of links, so children can be overridden."""
+    directory = Path(directory)
+    if directory.is_symlink():
+        target = directory.resolve(strict=True)
+        if not target.is_dir():
+            raise ValueError(f'File/directory conflict at {directory}')
+        directory.unlink()
+        directory.mkdir()
+        for entry in target.iterdir():
+            (directory / entry.name).symlink_to(entry, target_is_directory=entry.is_dir())
+    elif directory.exists() and not directory.is_dir():
+        raise ValueError(f'File/directory conflict at {directory}')
+    else:
+        directory.mkdir(exist_ok=True)
+
+
+def build_update_overlay(game, update, out):
+    """Symlink union of base + update, with every update file winning (PS4 update semantics)."""
+    game = Path(game).resolve(strict=True)
+    update = Path(update).resolve(strict=True)
+    out = Path(out).resolve()
+    clear(out, (game, update))
+    out.mkdir(parents=True, exist_ok=True)
+    for entry in game.iterdir():
+        (out / entry.name).symlink_to(entry, target_is_directory=entry.is_dir())
+    replaced = added = 0
+    for directory, dirs, files in os.walk(update, followlinks=False):
+        source_dir = Path(directory)
+        if any((source_dir / name).is_symlink() for name in [*dirs, *files]):
+            raise ValueError(f'Update folder contains a symlink: {source_dir}')
+        relative = source_dir.relative_to(update)
+        parent = out
+        for part in relative.parts:
+            parent = mods.child(parent, part)
+            materialize_overlay_directory(parent)
+        for name in sorted(files):
+            source = source_dir / name
+            if not source.is_file():
+                raise ValueError(f'Update entry is not a regular file: {source}')
+            destination = mods.child(parent, name)
+            existed = destination.exists() or destination.is_symlink()
+            if destination.is_dir() and not destination.is_symlink():
+                shutil.rmtree(destination)
+            elif existed:
+                destination.unlink()
+            destination.symlink_to(source)
+            if existed:
+                replaced += 1
+            else:
+                added += 1
+    print(f'Game update overlay: {update.name}: {replaced} base files replaced, {added} added',
+          file=sys.stderr)
+    return out
+
+
+def command_update_overlay(args):
+    """Print the effective game folder: base, or a sibling 1.09 update layered over it."""
+    game = Path(args.game).resolve(strict=True)
+    try:
+        update = find_game_update(game)
+        if update is None:
+            clear(args.out, (game,))
+            print('Game update overlay: no valid sibling 1.09 update; using selected folder',
+                  file=sys.stderr)
+            print(game)
+            return
+        result = build_update_overlay(game, update, args.out)
+        print(f'Game update overlay: using {update}', file=sys.stderr)
+        print(result)
+    except Exception as error:
+        try:
+            clear(args.out, (game,))
+        except Exception:
+            pass
+        print(f'Game update overlay: failed, using selected folder: {type(error).__name__}: {error}',
+              file=sys.stderr)
+        print(game)
+
+
 def command_apply(args):
     game = str(args.game)
     try:
@@ -723,6 +851,10 @@ def main():
         if name == 'apply':
             sub.add_argument('--game', required=True, type=Path)
             sub.add_argument('--out', required=True, type=Path)
+    update = commands.add_parser('update-overlay')
+    update.set_defaults(function=command_update_overlay)
+    update.add_argument('--game', required=True, type=Path)
+    update.add_argument('--out', required=True, type=Path)
     pkg = commands.add_parser('install-pkg')
     pkg.set_defaults(function=command_install_pkg)
     pkg.add_argument('--pkg', required=True, type=Path)

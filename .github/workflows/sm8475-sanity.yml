@@ -13,6 +13,7 @@ on:
       - "scripts/game_check.py"
       - "tests/test_game_check.py"
       - "tests/test_file_mods.c"
+      - "tests/test_mods_android.py"
       - ".github/workflows/sm8475-sanity.yml"
 
 jobs:
@@ -41,6 +42,8 @@ jobs:
       - name: Validate Bloodborne game-data checks
         run: |
           python3 -m unittest discover -s tests -p 'test_game_check.py'
+          python3 -I tests/test_mods_android.py AndroidModTests.test_update_overlay_uses_sibling_109 \
+            AndroidModTests.test_update_overlay_rejects_wrong_update
           cc -std=c11 -O2 -Wall -Wextra -Werror -pthread -I. -Isrc tests/test_file_mods.c -o /tmp/file-mods-test
           /tmp/file-mods-test
 
@@ -84,8 +87,10 @@ jobs:
           grep -q 'using original' src/probe.c
           grep -q 'GAME CHECK FAILED:' tools/android/prepare_game.py
           grep -q 'detail.startsWith("GAME CHECK FAILED:")' tools/android/frontend/src/ro/cobrabm/fexdroid/MainActivity.java
-          grep -q 'android:versionCode="21"' tools/android/frontend/AndroidManifest.xml
-          grep -q 'android:versionName="0.8.4-sm8475-dev4"' tools/android/frontend/AndroidManifest.xml
+          grep -q 'update-overlay --game' tools/android/run-thor.sh
+          grep -q 'Runtime file problem:' tools/android/frontend/src/ro/cobrabm/fexdroid/MainActivity.java
+          grep -q 'android:versionCode="22"' tools/android/frontend/AndroidManifest.xml
+          grep -q 'android:versionName="0.8.4-sm8475-dev5"' tools/android/frontend/AndroidManifest.xml
 
 
   bootstrap-rootfs:
