@@ -66,10 +66,11 @@ final class SettingsDialog {
     private static final String[] FPS_NAMES={"30 (the game's own)","40","45","60","Unlimited"};
     private static final String[] GPU_POWER_VALUES={"auto","max"};
     private static final String[] GPU_POWER_NAMES={"Automatic governor","Maximum KGSL constraint (diagnostic)"};
-    private static final String[] RENDERER_SYNC_VALUES={"normal","buffer-safe","strict"};
+    private static final String[] RENDERER_SYNC_VALUES={"normal","buffer-safe","resource-safe","strict"};
     private static final String[] RENDERER_SYNC_NAMES={
         "Normal · maximum throughput",
         "Buffer safe · synchronous vertex/index source copies",
+        "Resource safe · no prepared vertex/resource state",
         "Strict · serialize renderer for diagnosis"
     };
     private static final String[] FEX_PROFILE_VALUES={"fast","balanced","stable"};
@@ -270,8 +271,9 @@ final class SettingsDialog {
         final RadioGroup rendererSync=choices(box,RENDERER_SYNC_NAMES,
             indexOf(RENDERER_SYNC_VALUES,get("renderer_sync","normal"),0));
         TextView rendererSyncNote=new TextView(activity); rendererSyncNote.setTextSize(13); rendererSyncNote.setAlpha(0.7f);
-        rendererSyncNote.setText("Use Buffer safe first when geometry stretches or explodes. Strict is a "
-            +"diagnostic fallback and may reduce FPS substantially. Change one level at a time.");
+        rendererSyncNote.setText("For stretched/exploding geometry test in order: Normal → Buffer safe → "
+            +"Resource safe → Strict. Resource safe targets prepared vertex/resource state; Strict may "
+            +"reduce FPS substantially. Change one level at a time.");
         box.addView(rendererSyncNote);
 
         heading(box,"CPU translation profile");

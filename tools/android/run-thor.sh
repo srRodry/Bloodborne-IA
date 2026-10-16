@@ -109,12 +109,22 @@ case $renderer_sync in
         export BB_TOGGLE_FILE="$toggle_file"
         echo 'Renderer sync: buffer-safe (synchronous small guest buffer copies)'
         ;;
-    strict)
+    resource-safe)
+        # PreparedResources(4096) + DrawPreparation(8192) + EarlyDrawInputs(1<<35).
+        # This keeps the fast draw pipeline but forces vertex/index/resource descriptors to be
+        # resolved from the draw packet/current registers on the recording path.
         toggle_file="$base/renderer-sync.toggles"
-        printf '16384 0\n' > "$toggle_file"
+        printf '34359750656 0\n' > "$toggle_file"
+        export BB_TOGGLE_FILE="$toggle_file"
+        echo 'Renderer sync: resource-safe (no prepared resources/draws or early draw inputs)'
+        ;;
+    strict)
+        # Resource-safe plus DeferredStreamCopies(16384), then serialize Vulkan recording/submission.
+        toggle_file="$base/renderer-sync.toggles"
+        printf '34359767040 0\n' > "$toggle_file"
         export BB_TOGGLE_FILE="$toggle_file"
         export BB_DRAW_PIPE=0 BB_VK_RECORD_THREADS=1 BB_ASYNC_SUBMIT=0
-        echo 'Renderer sync: strict (buffer-safe + one recorder + sync submit + draw pipe off)'
+        echo 'Renderer sync: strict (resource-safe + buffer-safe + one recorder + sync submit + draw pipe off)'
         ;;
     *)
         renderer_sync=normal
