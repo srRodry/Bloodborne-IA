@@ -584,7 +584,8 @@ int main(int argc, char **argv) {
          * while entering the world. MainActivity exports BB_GAME_DIR as the original game folder,
          * which prepare_game.py has already verified as a supported clean 1.09 image. Prefer that
          * param.sfo for identity; app0 remains the source for runtime file accesses/mod overlays. */
-        const char *original_game=getenv("BB_GAME_DIR");
+        const char *original_game=getenv("BB_EFFECTIVE_GAME_DIR");
+        if (!original_game || !*original_game) original_game=getenv("BB_GAME_DIR");
         if (original_game && *original_game) {
             char original_sfo[4096], original_title[128]="", original_serial[16]="";
             uint32_t original_attributes=0;
@@ -593,10 +594,10 @@ int main(int argc, char **argv) {
                 sfo_value(original_sfo,"TITLE_ID",original_serial,sizeof(original_serial),NULL);
             if (have_original_serial && original_serial[0]) {
                 if (strcmp(serial,original_serial))
-                    printf("Game identity: app0 TITLE_ID=%s; original TITLE_ID=%s; using original\n",
+                    printf("Game identity: app0 TITLE_ID=%s; effective TITLE_ID=%s; using effective\n",
                            serial,original_serial);
                 else
-                    printf("Game identity: app0/original TITLE_ID=%s\n",original_serial);
+                    printf("Game identity: app0/effective TITLE_ID=%s\n",original_serial);
                 snprintf(serial,sizeof(serial),"%s",original_serial);
                 if (sfo_value(original_sfo,"TITLE",original_title,sizeof(original_title),NULL) &&
                     original_title[0])

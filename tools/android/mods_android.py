@@ -233,15 +233,10 @@ def clear(out, protected):
 def update_candidates(game):
     """Sibling update folders used by shadPS4/bbhost conventions, without changing the base game."""
     game = Path(game).resolve(strict=True)
-    seen = set()
-    out = []
-    for suffix in ('-UPDATE', '-update', '-patch', '-PATCH'):
-        candidate = game.parent / (game.name + suffix)
-        key = str(candidate).casefold()
-        if key not in seen:
-            seen.add(key)
-            out.append(candidate)
-    return out
+    # Android/shared-storage paths are case-sensitive on the devices we target: do not collapse
+    # -UPDATE and -update into one candidate.
+    return [game.parent / (game.name + suffix)
+            for suffix in ('-UPDATE', '-update', '-patch', '-PATCH')]
 
 
 def find_game_update(game):

@@ -68,7 +68,7 @@ class GameCheckTests(unittest.TestCase):
         self.assertEqual(game_check.problem(self.game('CUSA03173', '01.09', b'junk'))[0], 'unreadable')
 
     def test_supported_image_passes(self):
-        game = self.game('CUSA03173', '01.09')
+        game = self.game('CUSA00900', '01.09')
         with mock.patch.object(game_check, 'SUPPORTED_IMAGE', game_check.image_sha256(game)):
             self.assertIsNone(game_check.problem(game))
 
@@ -78,7 +78,7 @@ class GameCheckTests(unittest.TestCase):
         (folder / 'gxshader.shaderbnd.dcx').write_bytes(data)
 
     def test_intact_shaders_pass(self):
-        game = self.game('CUSA03173', '01.09')
+        game = self.game('CUSA00900', '01.09')
         self.shaders(game, dcx(bytes(range(256)) * 64))
         with mock.patch.object(game_check, 'SUPPORTED_IMAGE', game_check.image_sha256(game)):
             self.assertIsNone(game_check.problem(game))
@@ -90,13 +90,13 @@ class GameCheckTests(unittest.TestCase):
         return path
 
     def test_old_world_layout_with_109_eboot_is_rejected(self):
-        game = self.game('CUSA03173', '01.09')
+        game = self.game('CUSA00900', '01.09')
         self.layout(game, b'old base-game world layout')
         with mock.patch.object(game_check, 'SUPPORTED_IMAGE', game_check.image_sha256(game)):
             self.assertEqual(game_check.problem(game)[0], 'stale_update_data')
 
     def test_known_109_world_layout_passes(self):
-        game = self.game('CUSA03173', '01.09')
+        game = self.game('CUSA00900', '01.09')
         payload = b'fixture 1.09 world layout'
         self.layout(game, payload)
         with (mock.patch.object(game_check, 'SUPPORTED_IMAGE', game_check.image_sha256(game)),
@@ -104,9 +104,34 @@ class GameCheckTests(unittest.TestCase):
                                 __import__('hashlib').sha256(payload).hexdigest())):
             self.assertIsNone(game_check.problem(game))
 
+    def old_hunters_markers(self, game):
+        pack = game / game_check.OLD_HUNTERS_TITLE_PACK
+        pack.parent.mkdir(parents=True, exist_ok=True)
+        pack.write_bytes(dcx(b'prefix\0' + game_check.OLD_HUNTERS_TITLE_ART.encode() + b'\0suffix'))
+        for area in game_check.OLD_HUNTERS_AREAS:
+            (game / 'dvdroot_ps4/map' / area).mkdir(parents=True, exist_ok=True)
+
+    def test_old_hunters_edition_requires_update_data(self):
+        game = self.game('CUSA03173', '01.09')
+        with mock.patch.object(game_check, 'SUPPORTED_IMAGE', game_check.image_sha256(game)):
+            self.assertEqual(game_check.problem(game)[0], 'missing_old_hunters_data')
+        self.old_hunters_markers(game)
+        with mock.patch.object(game_check, 'SUPPORTED_IMAGE', game_check.image_sha256(game)):
+            self.assertIsNone(game_check.problem(game))
+
+    def test_old_hunters_reports_each_missing_marker(self):
+        game = self.game('CUSA03173', '01.09')
+        self.assertEqual(game_check.old_hunters_missing(game), game_check.OLD_HUNTERS_TITLE_PACK)
+        pack = game / game_check.OLD_HUNTERS_TITLE_PACK
+        pack.parent.mkdir(parents=True, exist_ok=True)
+        pack.write_bytes(dcx(b'no matching title art'))
+        self.assertIn(game_check.OLD_HUNTERS_TITLE_ART, game_check.old_hunters_missing(game))
+        pack.write_bytes(dcx(game_check.OLD_HUNTERS_TITLE_ART.encode() + b'\0'))
+        self.assertEqual(game_check.old_hunters_missing(game), 'dvdroot_ps4/map/m34_00_00_00')
+
     def test_damaged_shaders(self):
         # As LibOrbisPkg on .NET 6+ (issue #81): part of the data replaced by stale bytes.
-        game = self.game('CUSA03173', '01.09')
+        game = self.game('CUSA00900', '01.09')
         packed = bytearray(zlib.compress(os.urandom(4096)))
         packed[len(packed) // 2:] = packed[:len(packed) - len(packed) // 2]
         self.shaders(game, dcx(os.urandom(4096), bytes(packed)))
@@ -138,7 +163,7 @@ class GameCheckTests(unittest.TestCase):
 
     def test_every_problem_is_explained(self):
         for kind in ('missing_update', 'wrong_eboot', 'patched_eboot', 'other_title',
-                     'unreadable', 'stale_update_data', 'damaged_files'):
+                     'unreadable', 'stale_update_data', 'missing_old_hunters_data', 'damaged_files'):
             self.assertIn('CUSA', game_check.explain(kind, 'CUSA03173', '01.00'))
 
 

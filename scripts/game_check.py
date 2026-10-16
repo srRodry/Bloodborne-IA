@@ -24,6 +24,10 @@ from pathlib import Path
 SUPPORTED_TITLES = ('CUSA00900', 'CUSA00207', 'CUSA00208', 'CUSA00299', 'CUSA01363',  # US EU UK JP AS
                     'CUSA03179', 'CUSA03173', 'CUSA03014', 'CUSA03023')  # US EU JP AS
 SUPPORTED_VERSION = '01.09'
+OLD_HUNTERS_TITLES = {'CUSA03179', 'CUSA03173', 'CUSA03014', 'CUSA03023'}
+OLD_HUNTERS_AREAS = ('m34_00_00_00', 'm35_00_00_00', 'm36_00_00_00')
+OLD_HUNTERS_TITLE_PACK = 'dvdroot_ps4/menu/title.tpf.dcx'
+OLD_HUNTERS_TITLE_ART = 'MENU_Title_00004'
 SUPPORTED_IMAGE = '071df19c8880086d97182dbc057bc8cb37badaca57d9112683836b24a0444c0a'
 # The 1.09 executable with Lance McDonald's 60 fps patch applied to it, as some dumps ship it
 # (seen on US CUSA00900): one of its edits inverts a branch in the menu code (+0xf6d90d) and the
@@ -106,6 +110,34 @@ def stale_update_data(game):
     return hashlib.sha256(payload).hexdigest() != LAYOUT_109_SHA256
 
 
+
+def old_hunters_missing(game):
+    """First missing Old Hunters marker for editions that package the DLC, else None.
+
+    The 1.07+ update carries the DLC's title art and three areas. A 1.09 eboot/param.sfo beside
+    older base-game data is a known cause of FileTransferTask.cpp(865) / guest fault 0x20b56d2.
+    """
+    root = Path(game)
+    pack = root / OLD_HUNTERS_TITLE_PACK
+    if not pack.is_file():
+        return OLD_HUNTERS_TITLE_PACK
+    try:
+        raw = pack.read_bytes()
+        payload = dflt_payload(pack)
+    except (OSError, ValueError):
+        return OLD_HUNTERS_TITLE_PACK
+    data = payload if payload is not None else raw
+    narrow = OLD_HUNTERS_TITLE_ART.encode('ascii') + b'\0'
+    wide = OLD_HUNTERS_TITLE_ART.encode('utf-16-le') + b'\0\0'
+    if narrow not in data and wide not in data:
+        return f'{OLD_HUNTERS_TITLE_ART} in {OLD_HUNTERS_TITLE_PACK}'
+    for area in OLD_HUNTERS_AREAS:
+        relative = f'dvdroot_ps4/map/{area}'
+        if not (root / relative).is_dir():
+            return relative
+    return None
+
+
 def problem(game, image_hash=None):
     """None for the supported game, else (kind, title, version): kind is 'missing_update' (base
     game or an older update), 'wrong_eboot' (param.sfo says 1.09, eboot.bin is another version),
@@ -125,6 +157,8 @@ def problem(game, image_hash=None):
         if image_hash == SUPPORTED_IMAGE:
             if stale_update_data(game):
                 return 'stale_update_data', title, version
+            if title in OLD_HUNTERS_TITLES and old_hunters_missing(game):
+                return 'missing_old_hunters_data', title, version
             return ('damaged_files', title, version) if broken_files(game) else None
     except (OSError, ValueError, IndexError, StopIteration, KeyError):
         return 'unreadable', title, version
@@ -161,6 +195,12 @@ def explain(kind, title, version):
                              'game again and REPLACE existing files; do not choose Skip. If files '
                              'were modified directly by a mod, restore the clean 1.09 game data and '
                              'use the app\'s separate Mods folder instead.',
+        'missing_old_hunters_data': f'{found} This Old Hunters edition is missing data that ships '
+                                    f'with the 1.09 update (title art or m34/m35/m36 areas). This '
+                                    f'incomplete base/update set is known to fail in '
+                                    f'FileTransferTask.cpp(865), guest offset 0x20b56d2. Reapply '
+                                    f'the complete 1.09 update with Replace, or keep a complete '
+                                    f'{title}-UPDATE / {title}-patch folder beside the base game.',
         'damaged_files': f'{found} The game files are damaged: the shaders in {CHECKED_FOLDER} do '
                          'not unpack, and the game would hang while loading them. The extraction '
                          'tool left parts of compressed sectors stale (LibOrbisPkg PkgTool on '

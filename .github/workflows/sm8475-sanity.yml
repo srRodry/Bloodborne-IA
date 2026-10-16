@@ -83,14 +83,15 @@ jobs:
           grep -q 'export BB_GC_BUDGET_MB BB_GC_IDLE_SECONDS BB_VRAM_IDLE_SECONDS' tools/android/run-thor.sh
           grep -q 'case 11: return "SIGSEGV"' tools/android/frontend/src/ro/cobrabm/fexdroid/MainActivity.java
           grep -q 'Game profile:' tools/android/frontend/src/ro/cobrabm/fexdroid/MainActivity.java
-          grep -q 'const char \*original_game=getenv("BB_GAME_DIR")' src/probe.c
-          grep -q 'using original' src/probe.c
+          grep -q 'getenv("BB_EFFECTIVE_GAME_DIR")' src/probe.c
+          grep -q 'using effective' src/probe.c
           grep -q 'GAME CHECK FAILED:' tools/android/prepare_game.py
           grep -q 'detail.startsWith("GAME CHECK FAILED:")' tools/android/frontend/src/ro/cobrabm/fexdroid/MainActivity.java
           grep -q 'update-overlay --game' tools/android/run-thor.sh
           grep -q 'Runtime file problem:' tools/android/frontend/src/ro/cobrabm/fexdroid/MainActivity.java
-          grep -q 'android:versionCode="22"' tools/android/frontend/AndroidManifest.xml
-          grep -q 'android:versionName="0.8.4-sm8475-dev5"' tools/android/frontend/AndroidManifest.xml
+          grep -q 'OLD_HUNTERS_TITLE_ART' scripts/game_check.py
+          grep -q 'android:versionCode="23"' tools/android/frontend/AndroidManifest.xml
+          grep -q 'android:versionName="0.8.4-sm8475-dev6"' tools/android/frontend/AndroidManifest.xml
 
 
   bootstrap-rootfs:
