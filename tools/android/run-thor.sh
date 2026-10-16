@@ -182,8 +182,13 @@ fi
 [ -d "$base/arm64/fsr4_shaders" ] && export BB_FSR4_DIR="$base/arm64/fsr4_shaders"
 export BB_WINDOW_SIZE=1280x720
 export BB_RENDER_RES=$render BB_OUTPUT_RES=1280x720 BB_LIVE_RES=0
-export BB_DMEM_MB=5056 BB_PREUPLOAD=0 BB_GUEST_IN_PLACE=0 BB_UFFD=0
+# SM8475 performance baseline. Preupload mode 1 only refreshes data already resident in the
+# renderer arena; unlike mode 2 it does not populate new VRAM aggressively. This moves recurring
+# uploads ahead of the draw that needs them and is the renderer's documented low-risk fast path.
+export BB_DMEM_MB=5056 BB_PREUPLOAD=${BB_PREUPLOAD:-1} BB_PREUPLOAD_MB=${BB_PREUPLOAD_MB:-16}
+export BB_GUEST_IN_PLACE=0 BB_UFFD=0
 export BB_COPY_GPU_BUFFERS=1 BB_GPU_WRITE_TWINS=1 BB_GPU_WRITE_TWINS_MAX=65536
+echo "SM8475 performance: render=$render, preupload=${BB_PREUPLOAD}/${BB_PREUPLOAD_MB}MiB, draw-pipe=${BB_DRAW_PIPE}, renderer-sync=$renderer_sync"
 # Keep the two renderer memory lifetimes separate. They control different caches:
 # BB_GC_IDLE_SECONDS is texture-cache eviction; BB_VRAM_IDLE_SECONDS is BufferCache residency.
 # The first SM8475 dev build accidentally stopped exporting BB_VRAM_IDLE_SECONDS, making buffer

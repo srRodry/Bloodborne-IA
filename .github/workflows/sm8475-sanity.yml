@@ -74,9 +74,16 @@ jobs:
 
       - name: Check device-aware settings and crash diagnostics
         run: |
+          grep -q 'preset=4' tools/android/thor.ini
+          grep -q 'sharpen=0' tools/android/thor.ini
+          grep -q 'model_lod=2' tools/android/thor.ini
+          grep -q 'fps_limit=30' tools/android/thor.ini
           grep -q 'fex_profile=balanced' tools/android/thor.ini
           grep -q 'gpu_power=auto' tools/android/thor.ini
           grep -q 'renderer_sync=normal' tools/android/thor.ini
+          grep -q 'REVISION=2' tools/android/frontend/src/ro/cobrabm/fexdroid/SettingsDefaults.java
+          grep -q 'BB_PREUPLOAD=.*1' tools/android/run-thor.sh
+          grep -q 'BB_PREUPLOAD_MB=.*16' tools/android/run-thor.sh
           grep -q 'RENDERER_SYNC_VALUES' tools/android/frontend/src/ro/cobrabm/fexdroid/SettingsDialog.java
           grep -q 'Renderer sync: buffer-safe' tools/android/run-thor.sh
           grep -q 'Renderer sync: resource-safe' tools/android/run-thor.sh
@@ -98,8 +105,8 @@ jobs:
           grep -q 'update-overlay --game' tools/android/run-thor.sh
           grep -q 'Runtime file problem:' tools/android/frontend/src/ro/cobrabm/fexdroid/MainActivity.java
           grep -q 'OLD_HUNTERS_TITLE_ART' scripts/game_check.py
-          grep -q 'android:versionCode="25"' tools/android/frontend/AndroidManifest.xml
-          grep -q 'android:versionName="0.8.4-sm8475-dev8"' tools/android/frontend/AndroidManifest.xml
+          grep -q 'android:versionCode="26"' tools/android/frontend/AndroidManifest.xml
+          grep -q 'android:versionName="0.8.4-sm8475-dev9"' tools/android/frontend/AndroidManifest.xml
 
 
   bootstrap-rootfs:

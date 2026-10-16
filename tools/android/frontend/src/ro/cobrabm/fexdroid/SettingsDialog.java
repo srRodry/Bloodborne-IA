@@ -218,7 +218,7 @@ final class SettingsDialog {
         final RadioGroup upscalers=choices(box,UPSCALER_NAMES,indexOf(UPSCALER_VALUES,get("upscaler","fsr3"),1));
         heading(box,"Render resolution");
         int preset=0;
-        try { preset=Math.max(0,Math.min(4,Integer.parseInt(get("preset","3")))); } catch (NumberFormatException ignored) { preset=3; }
+        try { preset=Math.max(0,Math.min(4,Integer.parseInt(get("preset","4")))); } catch (NumberFormatException ignored) { preset=4; }
         final RadioGroup presets=choices(box,PRESETS,preset);
         final Switch frameGen=toggle(box,"FSR 3.1 frame generation","1".equals(get("frame_generation","0")));
         TextView frameGenNote=new TextView(activity); frameGenNote.setTextSize(13); frameGenNote.setAlpha(0.7f);
@@ -302,7 +302,7 @@ final class SettingsDialog {
 
         heading(box,"Model detail");
         int lod=1;
-        for (int i=0;i<LOD_VALUES.length;++i) if (LOD_VALUES[i].equals(get("model_lod","0"))) lod=i;
+        for (int i=0;i<LOD_VALUES.length;++i) if (LOD_VALUES[i].equals(get("model_lod","2"))) lod=i;
         final RadioGroup lods=choices(box,LOD_NAMES,lod);
 
         ScrollView scroll=new ScrollView(activity); scroll.addView(box);

@@ -25,7 +25,7 @@ import java.util.Set;
  *  controller mapping (pad.*), the GPU driver, the mods menu position and language, and the mods switch.
  *  Keys that are not in the defaults file stay as they are, as do the comments. */
 final class SettingsDefaults {
-    static final int REVISION=1;
+    static final int REVISION=2;
     private static final String MARKER="settings_defaults";
     private static final String[] KEPT={"gpu_driver","menu_pos","menu_language","mods_enabled"};
 
@@ -114,7 +114,7 @@ final class SettingsDefaults {
         write(new File(base,"cheats.state"),state);
         List<String> mark=new ArrayList<>(); mark.add(String.valueOf(REVISION));
         write(marker,mark);
-        android.util.Log.i("Bloodborne","default settings applied ("+(first ? "first install"
-            : "update from before 0.8.0, "+changed+" settings changed, controller mapping and GPU driver kept")+")");
+        android.util.Log.i("Bloodborne","default settings revision "+REVISION+" applied ("+(first ? "first install"
+            : changed+" settings changed; controller mapping, GPU driver and mod preferences kept")+")");
     }
 }
