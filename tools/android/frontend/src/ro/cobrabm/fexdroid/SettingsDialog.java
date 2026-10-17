@@ -66,6 +66,12 @@ final class SettingsDialog {
     private static final String[] FPS_NAMES={"30 (the game's own)","40","45","60","Unlimited"};
     private static final String[] GPU_POWER_VALUES={"auto","max"};
     private static final String[] GPU_POWER_NAMES={"Automatic governor","Maximum KGSL constraint (diagnostic)"};
+    private static final String[] PERFORMANCE_PROFILE_VALUES={"sustained","throughput","legacy"};
+    private static final String[] PERFORMANCE_PROFILE_NAMES={
+        "Sustained · lower speculative memory/CPU work",
+        "Throughput · more concurrent shader/recording work",
+        "Legacy dev9 · prior worker/memory configuration"
+    };
     private static final String[] RENDERER_SYNC_VALUES={"normal","buffer-safe","resource-safe","strict"};
     private static final String[] RENDERER_SYNC_NAMES={
         "Normal · maximum throughput",
@@ -267,6 +273,15 @@ final class SettingsDialog {
             +"for GPU governor under-clocking and may throttle sooner as the phone heats up.");
         box.addView(gpuPowerNote);
 
+        heading(box,"SM8475 performance profile");
+        final RadioGroup performanceProfiles=choices(box,PERFORMANCE_PROFILE_NAMES,
+            indexOf(PERFORMANCE_PROFILE_VALUES,get("performance_profile","sustained"),0));
+        TextView performanceNote=new TextView(activity); performanceNote.setTextSize(13);
+        performanceNote.setAlpha(0.7f);
+        performanceNote.setText("Sustained reduces speculative work on phones. Throughput may improve "
+            +"warm-up but run hotter. Legacy matches dev9 for A/B comparison.");
+        box.addView(performanceNote);
+
         heading(box,"Renderer synchronization");
         final RadioGroup rendererSync=choices(box,RENDERER_SYNC_NAMES,
             indexOf(RENDERER_SYNC_VALUES,get("renderer_sync","normal"),0));
@@ -313,6 +328,7 @@ final class SettingsDialog {
                 changed.put("upscaler",UPSCALER_VALUES[Math.max(0,checkedIndex(upscalers))]);
                 changed.put("fps_limit",FPS_VALUES[Math.max(0,checkedIndex(fpsLimit))]);
                 changed.put("gpu_power",GPU_POWER_VALUES[Math.max(0,checkedIndex(gpuPower))]);
+                changed.put("performance_profile",PERFORMANCE_PROFILE_VALUES[Math.max(0,checkedIndex(performanceProfiles))]);
                 changed.put("renderer_sync",RENDERER_SYNC_VALUES[Math.max(0,checkedIndex(rendererSync))]);
                 changed.put("frame_generation",frameGen.isChecked() && checkedIndex(upscalers)!=0 ? "1" : "0");
                 changed.put("fex_profile",FEX_PROFILE_VALUES[Math.max(0,checkedIndex(fexProfiles))]);

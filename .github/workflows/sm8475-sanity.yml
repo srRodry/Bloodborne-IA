@@ -42,6 +42,7 @@ jobs:
       - name: Validate Bloodborne game-data checks
         run: |
           python3 -m unittest discover -s tests -p 'test_game_check.py'
+          python3 -m unittest discover -s tests -p 'test_sm8475_performance.py'
           python3 -I tests/test_mods_android.py AndroidModTests.test_update_overlay_uses_sibling_109 \
             AndroidModTests.test_update_overlay_rejects_wrong_update
           cc -std=c11 -O2 -Wall -Wextra -Werror -pthread -I. -Isrc tests/test_file_mods.c -o /tmp/file-mods-test
@@ -83,7 +84,11 @@ jobs:
           grep -q 'renderer_sync=normal' tools/android/thor.ini
           grep -q 'REVISION=2' tools/android/frontend/src/ro/cobrabm/fexdroid/SettingsDefaults.java
           grep -q 'BB_PREUPLOAD=.*1' tools/android/run-thor.sh
-          grep -q 'BB_PREUPLOAD_MB=.*16' tools/android/run-thor.sh
+          grep -q 'default_preupload_mb=8' tools/android/run-thor.sh
+          grep -q 'default_preupload_mb=16' tools/android/run-thor.sh
+          grep -q 'BB_PREUPLOAD_SCAN_REGIONS' gpu/shadps4/video_core/buffer_cache/buffer_cache.cpp
+          grep -q 'performance_profile=sustained' tools/android/thor.ini
+          grep -q 'PERFORMANCE_PROFILE_VALUES' tools/android/frontend/src/ro/cobrabm/fexdroid/SettingsDialog.java
           grep -q 'RENDERER_SYNC_VALUES' tools/android/frontend/src/ro/cobrabm/fexdroid/SettingsDialog.java
           grep -q 'Renderer sync: buffer-safe' tools/android/run-thor.sh
           grep -q 'Renderer sync: resource-safe' tools/android/run-thor.sh
@@ -105,8 +110,8 @@ jobs:
           grep -q 'update-overlay --game' tools/android/run-thor.sh
           grep -q 'Runtime file problem:' tools/android/frontend/src/ro/cobrabm/fexdroid/MainActivity.java
           grep -q 'OLD_HUNTERS_TITLE_ART' scripts/game_check.py
-          grep -q 'android:versionCode="26"' tools/android/frontend/AndroidManifest.xml
-          grep -q 'android:versionName="0.8.4-sm8475-dev9"' tools/android/frontend/AndroidManifest.xml
+          grep -q 'android:versionCode="27"' tools/android/frontend/AndroidManifest.xml
+          grep -q 'android:versionName="0.8.4-sm8475-dev10"' tools/android/frontend/AndroidManifest.xml
 
 
   bootstrap-rootfs:

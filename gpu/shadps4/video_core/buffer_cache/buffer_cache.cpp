@@ -3404,7 +3404,8 @@ void BufferCache::DropTwins(VAddr addr, u64 size) {
 }
 
 void BufferCache::Preupload(u64 budget) {
-    if (!PreuploadEnabled()) {
+    // Zero speculative budget must not trigger a scan or upload.
+    if (budget == 0 || !PreuploadEnabled()) {
         return;
     }
     const bool full = PreuploadMode() == 2;
@@ -3422,8 +3423,17 @@ void BufferCache::Preupload(u64 budget) {
     }
     // Regions written within these frames are left alone: the game is still filling them.
     constexpr u32 QuietFrames = 10;
-    // Regions looked at per call (CPU time bound): 256 x 4 MiB.
-    constexpr u32 MaxRegions = 256;
+    // Bound speculative per-frame CPU scans; malformed/zero config uses the old ceiling.
+    static const u32 max_regions = [] {
+        const char* env = std::getenv("BB_PREUPLOAD_SCAN_REGIONS");
+        if (!env || !*env) {
+            return 256u;
+        }
+        char* end = nullptr;
+        const unsigned long parsed = std::strtoul(env, &end, 10);
+        return *end == '\0' && parsed != 0
+            ? static_cast<u32>(std::min(parsed, 256ul)) : 256u;
+    }();
     std::vector<std::pair<VAddr, VAddr>> ranges;
     {
         std::scoped_lock lk{preupload_mutex};
@@ -3444,13 +3454,13 @@ void BufferCache::Preupload(u64 budget) {
         first = 0;
     }
     u32 visited = 0;
-    for (std::size_t n = 0; n < ranges.size() && visited < MaxRegions; ++n) {
+    for (std::size_t n = 0; n < ranges.size() && visited < max_regions; ++n) {
         const auto [start, end] = ranges[(first + n) % ranges.size()];
         VAddr at = n == 0 ? std::max(start, preupload_cursor) : start;
         if (at >= end) {
             at = start;
         }
-        while (at < end && visited < MaxRegions) {
+        while (at < end && visited < max_regions) {
             const VAddr region = at & ~(TRACKER_HIGHER_PAGE_SIZE - 1);
             const VAddr stop = std::min(end, region + TRACKER_HIGHER_PAGE_SIZE);
             ++visited;

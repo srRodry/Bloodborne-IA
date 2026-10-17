@@ -182,22 +182,58 @@ fi
 [ -d "$base/arm64/fsr4_shaders" ] && export BB_FSR4_DIR="$base/arm64/fsr4_shaders"
 export BB_WINDOW_SIZE=1280x720
 export BB_RENDER_RES=$render BB_OUTPUT_RES=1280x720 BB_LIVE_RES=0
-# SM8475 performance baseline. Preupload mode 1 only refreshes data already resident in the
-# renderer arena; unlike mode 2 it does not populate new VRAM aggressively. This moves recurring
-# uploads ahead of the draw that needs them and is the renderer's documented low-risk fast path.
-export BB_DMEM_MB=5056 BB_PREUPLOAD=${BB_PREUPLOAD:-1} BB_PREUPLOAD_MB=${BB_PREUPLOAD_MB:-16}
+# SM8475 profiles vary speculative work, not correctness-critical emulation.
+# Dev9 can be recovered without clearing settings, saves or game files.
+performance_profile=$(setting performance_profile)
+case $performance_profile in
+    sustained|'')
+        performance_profile=sustained
+        default_preupload_mb=8
+        default_preupload_scan=96
+        default_record_threads=2
+        default_compile_threads=2
+        default_texture_idle=30
+        ;;
+    throughput)
+        default_preupload_mb=16
+        default_preupload_scan=256
+        default_record_threads=3
+        default_compile_threads=3
+        default_texture_idle=20
+        ;;
+    legacy)
+        default_preupload_mb=16
+        default_preupload_scan=256
+        default_record_threads=2
+        default_compile_threads=2
+        default_texture_idle=20
+        ;;
+    *)
+        echo "Unknown performance profile '$performance_profile'; using sustained"
+        performance_profile=sustained
+        default_preupload_mb=8
+        default_preupload_scan=96
+        default_record_threads=2
+        default_compile_threads=2
+        default_texture_idle=30
+        ;;
+esac
+# Environment overrides and thor-local.sh (sourced later) take precedence.
+export BB_PERFORMANCE_PROFILE=$performance_profile
+export BB_DMEM_MB=5056 BB_PREUPLOAD=${BB_PREUPLOAD:-1}
+BB_PREUPLOAD_MB=${BB_PREUPLOAD_MB:-$default_preupload_mb}
+BB_PREUPLOAD_SCAN_REGIONS=${BB_PREUPLOAD_SCAN_REGIONS:-$default_preupload_scan}
+BB_VK_RECORD_THREADS=${BB_VK_RECORD_THREADS:-$default_record_threads}
+BB_ASYNC_PIPELINE_THREADS=${BB_ASYNC_PIPELINE_THREADS:-$default_compile_threads}
+export BB_PREUPLOAD_MB BB_PREUPLOAD_SCAN_REGIONS BB_VK_RECORD_THREADS BB_ASYNC_PIPELINE_THREADS
 export BB_GUEST_IN_PLACE=0 BB_UFFD=0
 export BB_COPY_GPU_BUFFERS=1 BB_GPU_WRITE_TWINS=1 BB_GPU_WRITE_TWINS_MAX=65536
-echo "SM8475 performance: render=$render, preupload=${BB_PREUPLOAD}/${BB_PREUPLOAD_MB}MiB, draw-pipe=${BB_DRAW_PIPE}, renderer-sync=$renderer_sync"
-# Keep the two renderer memory lifetimes separate. They control different caches:
-# BB_GC_IDLE_SECONDS is texture-cache eviction; BB_VRAM_IDLE_SECONDS is BufferCache residency.
-# The first SM8475 dev build accidentally stopped exporting BB_VRAM_IDLE_SECONDS, making buffer
-# copies fall back to 60 s instead of the upstream Android baseline of 20 s. Restore the proven
-# upstream lifetime/budget semantics before attempting any further memory optimisation.
+# Texture GC is active; BufferCache idle demotion needs GUEST_IN_PLACE (off here).
 BB_GC_BUDGET_MB=${BB_GC_BUDGET_MB:-4096}
-BB_GC_IDLE_SECONDS=${BB_GC_IDLE_SECONDS:-20}
+BB_GC_IDLE_SECONDS=${BB_GC_IDLE_SECONDS:-$default_texture_idle}
 BB_VRAM_IDLE_SECONDS=${BB_VRAM_IDLE_SECONDS:-20}
 export BB_GC_BUDGET_MB BB_GC_IDLE_SECONDS BB_VRAM_IDLE_SECONDS
+echo "SM8475 performance: profile=$performance_profile, render=$render, preupload=${BB_PREUPLOAD}/${BB_PREUPLOAD_MB}MiB, scan=${BB_PREUPLOAD_SCAN_REGIONS}, record=${BB_VK_RECORD_THREADS}, compile=${BB_ASYNC_PIPELINE_THREADS}, draw-pipe=${BB_DRAW_PIPE}, renderer-sync=$renderer_sync"
 mem_kb=$(awk '/^MemTotal:/{print $2; exit}' /proc/meminfo 2>/dev/null || true)
 mem_avail_kb=$(awk '/^MemAvailable:/{print $2; exit}' /proc/meminfo 2>/dev/null || true)
 echo "Memory profile: MemTotal=${mem_kb:-unknown} KiB, MemAvailable=${mem_avail_kb:-unknown} KiB, texture budget=${BB_GC_BUDGET_MB} MiB, texture idle=${BB_GC_IDLE_SECONDS}s, buffer idle=${BB_VRAM_IDLE_SECONDS}s"
