@@ -98,7 +98,9 @@ jobs:
           grep -q 'BB_DRAW_PIPE=0 BB_VK_RECORD_THREADS=1 BB_ASYNC_SUBMIT=0' tools/android/run-thor.sh
           grep -q 'FEX_PROFILE_VALUES' tools/android/frontend/src/ro/cobrabm/fexdroid/SettingsDialog.java
           grep -q 'cpuMaxFreqKHz' tools/android/frontend/src/ro/cobrabm/fexdroid/SettingsDialog.java
-          grep -q 'BB_GC_IDLE_SECONDS=.*20' tools/android/run-thor.sh
+          grep -q 'default_texture_idle=30' tools/android/run-thor.sh
+          grep -q 'default_texture_idle=20' tools/android/run-thor.sh
+          grep -q 'BB_GC_IDLE_SECONDS=.*default_texture_idle' tools/android/run-thor.sh
           grep -q 'BB_VRAM_IDLE_SECONDS=.*20' tools/android/run-thor.sh
           grep -q 'export BB_GC_BUDGET_MB BB_GC_IDLE_SECONDS BB_VRAM_IDLE_SECONDS' tools/android/run-thor.sh
           grep -q 'case 11: return "SIGSEGV"' tools/android/frontend/src/ro/cobrabm/fexdroid/MainActivity.java
